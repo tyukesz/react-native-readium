@@ -27,11 +27,7 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       onLocationChange: wrappedOnLocationChange,
       onTableOfContents: wrappedOnTableOfContents,
       preferences,
-<<<<<<< HEAD
       hidePageNumbers,
-=======
-      showPageNumbers,
->>>>>>> fab1b1e (New prop: show or hide page numbers at the bottom of the rendered ebook (iOS))
       ...props
     },
     forwardedRef
@@ -105,11 +101,7 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
           height={height}
           width={width}
           {...props}
-<<<<<<< HEAD
           hidePageNumbers={hidePageNumbers}
-=======
-          showPageNumbers={showPageNumbers}
->>>>>>> fab1b1e (New prop: show or hide page numbers at the bottom of the rendered ebook (iOS))
           preferences={stringifiedPreferences}
           onLocationChange={onLocationChange}
           onTableOfContents={onTableOfContents}

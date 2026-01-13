@@ -359,10 +359,3 @@ extension ReaderViewController {
     positionLabelManager?.setHidden(hidden)
   }
 }
-
-extension ReaderViewController {
-  @MainActor
-  func setPositionLabelHidden(_ hidden: Bool) {
-    positionLabel.isHidden = hidden
-  }
-}
