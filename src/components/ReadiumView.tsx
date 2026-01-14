@@ -67,7 +67,11 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       (event: any) => {
         if (wrappedOnTableOfContents) {
           const toc = event.nativeEvent.toc || null;
-          wrappedOnTableOfContents(toc);
+          const totalPositions = event.nativeEvent.totalPositions ?? null;
+          wrappedOnTableOfContents({
+            toc,
+            totalPositions,
+          });
         }
       },
       [wrappedOnTableOfContents]

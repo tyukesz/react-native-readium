@@ -5,13 +5,14 @@ import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNati
 // eslint-disable-next-line @react-native/no-deep-imports
 import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
 import type { File } from './interfaces/File';
-import type { Link } from './interfaces/Link';
+import type { TocItem } from './interfaces/BaseReadiumViewProps';
 import type { Locator } from './interfaces/Locator';
 
 // Event types for native events
 type OnLocationChangeEvent = Readonly<Locator>;
 type OnTableOfContentsEvent = Readonly<{
-  toc: ReadonlyArray<Link> | null;
+  toc: ReadonlyArray<TocItem> | null;
+  totalPositions: number | null;
 }>;
 
 // Native component props interface

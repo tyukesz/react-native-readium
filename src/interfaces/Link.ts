@@ -3,7 +3,7 @@
  */
 export interface Link {
   href: string;
-  templated: boolean;
+  templated?: boolean;
   type?: string | null;
   title?: string | null;
   rels?: Set<string>;
@@ -13,6 +13,8 @@ export interface Link {
   bitrate?: number | null;
   duration?: number | null;
   languages?: string[];
-  alternates?: Link[];
-  children?: Link[];
+  alternates?: Link[] | { items: Link[] };
+  children?: Link[] | { items: Link[] };
+  startPosition?: number | null;
+  endPosition?: number | null;
 }

@@ -6,6 +6,7 @@
   "types": "lib/src/index.d.ts",
   "react-native": "src/index",
   "source": "src/index",
+  "private": true,
   "files": [
     "src",
     "lib",

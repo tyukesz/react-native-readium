@@ -212,8 +212,7 @@ DRM is not supported at this time. However, there is a clear path to [support it
 | `preferences` | [`Partial<Preferences>`](https://github.com/readium/swift-toolkit/blob/main/docs/Guides/Navigator%20Preferences.md#appendix-preference-constraints)  | :white_check_mark: | An object that allows you to control various aspects of the reader's UI (epub only) |
 | `style`    | `ViewStyle`          | :white_check_mark: | A traditional style object. |
 | `onLocationChange` | `(locator: Locator) => void` | :white_check_mark: | A callback that fires whenever the location is changed (e.g. the user transitions to a new page)|
-| `onTableOfContents` | `(toc: Link[] \| null) => void` | :white_check_mark: | A callback that fires once the file is parsed and emits the table of contents embedded in the file. Returns `null` or an empty `[]` if no TOC exists. See the [`Link`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/Link.ts) interface for more info. |
-
+| `onTableOfContents` | `(payload: { toc: Array<Link & { startPosition?: number | null; endPosition?: number | null }> \| null; totalPositions: number | null }) => void` | :white_check_mark: | A callback that fires once the file is parsed and emits the table of contents embedded in the file along with the total number of discrete positions (if available). Each TOC entry includes `startPosition` and `endPosition` when those positions could be resolved. Returns `null` or an empty `[]` for the TOC portion when none exists. See the [`Link`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/Link.ts) interface for more info. |
 #### :warning: Web vs Native File URLs
 
 Please note that on `web` the `File.url` should be a web accessible URL path to

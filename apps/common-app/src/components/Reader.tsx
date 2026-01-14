@@ -113,9 +113,9 @@ export const Reader: React.FC<ReaderProps> = ({
               hidePageNumbers={hidePageNumbers}
               preferences={preferences}
               onLocationChange={(locator: Locator) => setLocation(locator)}
-              onTableOfContents={(toc: Link[] | null) => {
-                if (toc) {
-                  setToc(toc);
+              onTableOfContents={(payload) => {
+                if (payload.toc) {
+                  setToc(payload.toc);
                 }
               }}
             />

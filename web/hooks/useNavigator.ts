@@ -16,6 +16,7 @@ import { HttpFetcher } from '@readium/shared';
 import { Link } from '@readium/shared';
 
 import type { ReadiumProps } from '../../src/components/ReadiumView';
+import type { TocItem } from '../../src/interfaces/BaseReadiumViewProps';
 import { normalizeManifest } from '../utils/manifestNormalizer';
 
 interface RefProps
@@ -221,8 +222,15 @@ export const useNavigator = ({
           ? manifest.toc
           : // @ts-ignore
             manifest.toc.items || [];
-        // @ts-ignore - Type compatibility
-        onTableOfContents(tocItems);
+        const rawRanges = buildPositionRanges(positions);
+        const assignedRanges = assignRangesForToc(tocItems, rawRanges);
+        const annotated = tocItems
+          // @ts-ignore
+          .map((link: Link) => annotateLink(link, assignedRanges));
+        onTableOfContents({
+          toc: annotated,
+          totalPositions: positions.length,
+        });
       }
 
       setNavigator(nav);
@@ -232,4 +240,74 @@ export const useNavigator = ({
   }, [file.url, container]);
 
   return navigator;
+};
+
+type Range = {
+  startPosition: number;
+  endPosition: number;
+};
+
+const normalizeHref = (href: string): string =>
+  href.split('#')[0].split('?')[0];
+
+const buildPositionRanges = (positions: Locator[]): Record<string, Range> => {
+  const ranges: Record<string, Range> = {};
+  positions.forEach((locator, index) => {
+    const href = normalizeHref(locator.href);
+    const numericPosition = locator.locations?.position ?? index + 1;
+    const existing = ranges[href];
+
+    if (existing) {
+      ranges[href] = {
+        startPosition: Math.min(existing.startPosition, numericPosition),
+        endPosition: Math.max(existing.endPosition, numericPosition),
+      };
+    } else {
+      ranges[href] = {
+        startPosition: numericPosition,
+        endPosition: numericPosition,
+      };
+    }
+  });
+  return ranges;
+};
+
+const assignRangesForToc = (
+  links: Link[],
+  rawRanges: Record<string, Range>
+): Record<string, Range> => {
+  const ranges = { ...rawRanges };
+  let lastAssigned = 0;
+
+  const assign = (link: Link) => {
+    const key = normalizeHref(link.href);
+    const existing = ranges[key];
+    const startCandidate = existing?.startPosition ?? lastAssigned + 1;
+    const start =
+      existing && existing.startPosition > lastAssigned + 1
+        ? lastAssigned + 1
+        : startCandidate;
+    const endCandidate = existing?.endPosition ?? start;
+    const end = Math.max(endCandidate, start);
+
+    ranges[key] = { startPosition: start, endPosition: end };
+    lastAssigned = Math.max(lastAssigned, end);
+
+    link.children?.items?.forEach(assign);
+  };
+
+  links.forEach(assign);
+  return ranges;
+};
+
+const annotateLink = (link: Link, ranges: Record<string, Range>): TocItem => {
+  const key = normalizeHref(link.href);
+  const range = ranges[key];
+
+  return {
+    ...link,
+    startPosition: range?.startPosition ?? null,
+    endPosition: range?.endPosition ?? null,
+    children: link.children?.items?.map((child) => annotateLink(child, ranges)),
+  };
 };

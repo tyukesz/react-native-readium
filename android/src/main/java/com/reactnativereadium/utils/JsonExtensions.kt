@@ -3,6 +3,7 @@ package com.reactnativereadium.utils
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.WritableMap
+import com.reactnativereadium.reader.PositionRange
 import org.json.JSONArray
 import org.json.JSONObject
 import org.readium.r2.shared.publication.Link
@@ -18,6 +19,49 @@ internal fun List<Link>.toWritableArray(): WritableArray =
   Arguments.createArray().apply {
     forEach { pushMap(it.toWritableMap()) }
   }
+
+internal fun List<Link>.toWritableArrayWithPositions(
+  positionsRanges: Map<String, PositionRange>
+): WritableArray =
+  Arguments.createArray().apply {
+    forEach { pushMap(it.toWritableMapWithPositions(positionsRanges)) }
+  }
+
+internal fun Link.toWritableMapWithPositions(
+  positionsRanges: Map<String, PositionRange>
+): WritableMap {
+  val map = this.toWritableMap()
+  val hrefKey = this.href.toString().normalizeHref()
+  val range = positionsRanges[hrefKey]
+
+  if (range != null) {
+    if (range.start != null) {
+      map.putInt("startPosition", range.start)
+    } else {
+      map.putNull("startPosition")
+    }
+    if (range.end != null) {
+      map.putInt("endPosition", range.end)
+    } else {
+      map.putNull("endPosition")
+    }
+  } else {
+    map.putNull("startPosition")
+    map.putNull("endPosition")
+  }
+
+  if (this.children.isNotEmpty()) {
+    map.putArray(
+      "children",
+      this.children.toWritableArrayWithPositions(positionsRanges)
+    )
+  }
+
+  return map
+}
+
+private fun String.normalizeHref(): String =
+  this.substringBefore('#').substringBefore('?')
 
 internal fun JSONObject.toWritableMap(): WritableMap {
   val map = Arguments.createMap()

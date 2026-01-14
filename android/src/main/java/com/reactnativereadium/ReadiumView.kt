@@ -17,6 +17,7 @@ import com.reactnativereadium.utils.Dimensions
 import com.reactnativereadium.utils.File
 import com.reactnativereadium.utils.LinkOrLocator
 import com.reactnativereadium.utils.toWritableArray
+import com.reactnativereadium.utils.toWritableArrayWithPositions
 import com.reactnativereadium.utils.toWritableMap
 import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.navigator.epub.EpubPreferences
@@ -100,7 +101,15 @@ class ReadiumView(
         }
         is ReaderViewModel.Event.TableOfContentsLoaded -> {
           val payload = Arguments.createMap().apply {
-            putArray("toc", event.toc.toWritableArray())
+            putArray(
+              "toc",
+              event.toc.toWritableArrayWithPositions(event.positionsRanges)
+            )
+            if (event.totalPositions != null) {
+              putInt("totalPositions", event.totalPositions)
+            } else {
+              putNull("totalPositions")
+            }
           }
           dispatch(ReadiumViewManager.ON_TABLE_OF_CONTENTS, payload)
         }

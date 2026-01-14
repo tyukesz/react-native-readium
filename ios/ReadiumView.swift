@@ -191,14 +191,129 @@ class ReadiumView : UIView, Loggable {
       guard let self = self else { return }
 
       let tocResult = await vc.publication.tableOfContents()
+      let positionsResult = await vc.publication.positions()
+      let positions: [Locator]
+      let totalPositions: Int?
+      switch positionsResult {
+      case .success(let fetchedPositions):
+        positions = fetchedPositions
+        totalPositions = fetchedPositions.count
+      case .failure:
+        positions = []
+        totalPositions = nil
+      }
+
+      let rawRanges = buildRawPositionRanges(from: positions)
       switch tocResult {
       case .success(let links):
-        self.onTableOfContents?([
-          "toc": links.map { $0.json }
-        ])
+        let annotatedRanges = assignRangesForToc(links: links, rawRanges: rawRanges)
+        var payload: [String: Any] = [
+          "toc": annotatedLinksJSON(links, ranges: annotatedRanges)
+        ]
+        payload["totalPositions"] = totalPositions ?? NSNull()
+        self.onTableOfContents?(payload)
       case .failure(let error):
         self.log(.error, "Failed to fetch table of contents: \(error)")
       }
     }
   }
+}
+
+private struct PositionRange {
+  var start: Int
+  var end: Int
+}
+
+private func buildRawPositionRanges(from positions: [Locator]) -> [String: PositionRange] {
+  var ranges: [String: PositionRange] = [:]
+
+  for (index, locator) in positions.enumerated() {
+    guard let href = locator.json["href"] as? String else {
+      continue
+    }
+
+    let key = normalizeHref(href)
+    let numericPosition = locator.locations.position ?? (index + 1)
+
+    if let existing = ranges[key] {
+      let start = min(existing.start, numericPosition)
+      let end = max(existing.end, numericPosition)
+      ranges[key] = PositionRange(start: start, end: end)
+    } else {
+      ranges[key] = PositionRange(start: numericPosition, end: numericPosition)
+    }
+  }
+
+  return ranges
+}
+
+private func assignRangesForToc(
+  links: [Link],
+  rawRanges: [String: PositionRange]
+) -> [String: PositionRange] {
+  var ranges = rawRanges
+  var lastAssigned = 0
+
+  func assign(_ link: Link) {
+    guard let href = link.json["href"] as? String else {
+      link.children.forEach(assign)
+      return
+    }
+
+    let key = normalizeHref(href)
+    let existing = ranges[key]
+    let startCandidate = existing?.start ?? (lastAssigned + 1)
+    let start = (existing?.start != nil && existing!.start > lastAssigned + 1)
+      ? lastAssigned + 1
+      : startCandidate
+    let endCandidate = existing?.end ?? start
+    let end = max(endCandidate, start)
+
+    ranges[key] = PositionRange(start: start, end: end)
+    lastAssigned = max(lastAssigned, end)
+
+    link.children.forEach(assign)
+  }
+
+  links.forEach(assign)
+  return ranges
+}
+
+private func annotatedLinksJSON(
+  _ links: [Link],
+  ranges: [String: PositionRange]
+) -> [[String: Any]] {
+  return links.map { annotatedLinkJSON($0, ranges: ranges) }
+}
+
+private func annotatedLinkJSON(
+  _ link: Link,
+  ranges: [String: PositionRange]
+) -> [String: Any] {
+  var json = link.json
+  if let href = json["href"] as? String {
+    let key = normalizeHref(href)
+    if let range = ranges[key] {
+      json["startPosition"] = range.start
+      json["endPosition"] = range.end
+    } else {
+      json["startPosition"] = NSNull()
+      json["endPosition"] = NSNull()
+    }
+  } else {
+    json["startPosition"] = NSNull()
+    json["endPosition"] = NSNull()
+  }
+
+  let annotatedChildren = link.children.map { annotatedLinkJSON($0, ranges: ranges) }
+  if !annotatedChildren.isEmpty {
+    json["children"] = annotatedChildren
+  }
+
+  return json
+}
+
+private func normalizeHref(_ href: String) -> String {
+  let noFragment = href.components(separatedBy: "#").first ?? href
+  return noFragment.components(separatedBy: "?").first ?? noFragment
 }
