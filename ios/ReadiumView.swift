@@ -223,7 +223,7 @@ class ReadiumView : UIView, Loggable {
 }
 
 private func positionRangesJSON(
-  _ ranges: [String: PositionRange]
+  _ ranges: [String: (start: Int, end: Int)]
 ) -> [String: Any] {
   var json: [String: Any] = [:]
   for (href, range) in ranges {

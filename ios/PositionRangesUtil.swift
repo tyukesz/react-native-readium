@@ -1,24 +1,19 @@
 import Foundation
 import ReadiumShared
 
-struct PositionRange {
-  var start: Int
-  var end: Int
-}
-
 struct PositionRangesUtil {
   static func getPositionRangesByChapter(
     links: [Link],
     positions: [Locator]
-  ) -> [String: PositionRange] {
+  ) -> [String: (start: Int, end: Int)] {
     let rawRanges = buildRawPositionRanges(from: positions)
     return assignRangesForToc(links: links, rawRanges: rawRanges)
   }
 
   private static func buildRawPositionRanges(
     from positions: [Locator]
-  ) -> [String: PositionRange] {
-    var ranges: [String: PositionRange] = [:]
+  ) -> [String: (start: Int, end: Int)] {
+    var ranges: [String: (start: Int, end: Int)] = [:]
 
     for (index, locator) in positions.enumerated() {
       guard let href = locator.json["href"] as? String else {
@@ -31,9 +26,9 @@ struct PositionRangesUtil {
       if let existing = ranges[key] {
         let start = min(existing.start, numericPosition)
         let end = max(existing.end, numericPosition)
-        ranges[key] = PositionRange(start: start, end: end)
+        ranges[key] = (start: start, end: end)
       } else {
-        ranges[key] = PositionRange(start: numericPosition, end: numericPosition)
+        ranges[key] = (start: numericPosition, end: numericPosition)
       }
     }
 
@@ -42,10 +37,10 @@ struct PositionRangesUtil {
 
   private static func assignRangesForToc(
     links: [Link],
-    rawRanges: [String: PositionRange]
-  ) -> [String: PositionRange] {
+    rawRanges: [String: (start: Int, end: Int)]
+  ) -> [String: (start: Int, end: Int)] {
     var normalizedRanges = rawRanges
-    var rangesByHref: [String: PositionRange] = [:]
+    var rangesByHref: [String: (start: Int, end: Int)] = [:]
     var lastAssigned = 0
 
     func assign(_ link: Link) {
@@ -65,7 +60,7 @@ struct PositionRangesUtil {
       let endCandidate = existing?.end ?? start
       let end = Swift.max(endCandidate, start)
 
-      let range = PositionRange(start: start, end: end)
+      let range = (start: start, end: end)
       normalizedRanges[normalizedKey] = range
       rangesByHref[href] = range
       lastAssigned = max(lastAssigned, end)
