@@ -6,6 +6,7 @@ import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.reactnativereadium.utils.EventChannel
 import com.reactnativereadium.utils.LinkOrLocator
+import com.reactnativereadium.utils.PositionRangesUtil
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -38,21 +39,23 @@ abstract class BaseReaderFragment : Fragment() {
     super.onViewCreated(view, savedInstanceState)
 
     val viewScope = viewLifecycleOwner.lifecycleScope
-    val tableOfContents = model.publication.tableOfContents
+    val tableOfContents = runCatching { model.publication.tableOfContents }.getOrNull().orEmpty()
 
     viewScope.launch {
       val positionsResult = runCatching { model.publication.positions() }
       val positions = positionsResult.getOrNull().orEmpty()
       val totalPositions = positionsResult.getOrNull()?.size
 
-      val rawRanges = positions.buildRawPositionRanges()
-      val annotatedRanges = assignRangesForToc(tableOfContents, rawRanges)
+      val positionsRanges = PositionRangesUtil.getPositionRangesByChapter(
+        tableOfContents,
+        positions
+      )
 
       channel.send(
         ReaderViewModel.Event.TableOfContentsLoaded(
           tableOfContents,
           totalPositions,
-          annotatedRanges
+          positionsRanges
         )
       )
     }
@@ -92,50 +95,3 @@ abstract class BaseReaderFragment : Fragment() {
   }
 
 }
-
-  private fun List<Locator>.buildRawPositionRanges(): MutableMap<String, PositionRange> {
-    val ranges = mutableMapOf<String, PositionRange>()
-    forEachIndexed { index, locator ->
-      val key = locator.href.toString().normalizeHref()
-      val numericPosition = locator.locations.position ?: (index + 1)
-      val existing = ranges[key]
-      if (existing == null) {
-        ranges[key] = PositionRange(numericPosition, numericPosition)
-      } else {
-        val start = minOf(existing.start ?: numericPosition, numericPosition)
-        val end = maxOf(existing.end ?: numericPosition, numericPosition)
-        ranges[key] = PositionRange(start, end)
-      }
-    }
-    return ranges
-  }
-
-  private fun assignRangesForToc(
-    links: List<Link>,
-    rawRanges: MutableMap<String, PositionRange>
-  ): Map<String, PositionRange> {
-    var lastAssigned = 0
-
-    fun assign(link: Link) {
-      val key = link.href.toString().normalizeHref()
-      val existing = rawRanges[key]
-      val tentativeStart = existing?.start ?: lastAssigned + 1
-      val start = when {
-        existing?.start != null && existing.start > lastAssigned + 1 -> lastAssigned + 1
-        else -> tentativeStart
-      }
-      val tentativeEnd = existing?.end ?: start
-      val end = if (tentativeEnd < start) start else tentativeEnd
-
-      rawRanges[key] = PositionRange(start, end)
-      lastAssigned = maxOf(lastAssigned, end)
-
-      link.children.forEach { assign(it) }
-    }
-
-    links.forEach { assign(it) }
-    return rawRanges
-  }
-
-  private fun String.normalizeHref(): String =
-    this.substringBefore('#').substringBefore('?')

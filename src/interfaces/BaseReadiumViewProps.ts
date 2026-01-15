@@ -3,15 +3,13 @@ import type { Link } from './Link';
 import type { Locator } from './Locator';
 import type { File } from './File';
 
-export type TocItem = Link & {
-  children?: TocItem[];
-  startPosition: number | null;
-  endPosition: number | null;
-};
-
 export type TableOfContentsPayload = {
-  toc: TocItem[] | null;
+  toc: Link[];
   totalPositions: number | null;
+  positionsRanges?: Record<
+    string, // the key for this record is the href from ToC items
+    { startPosition: number; endPosition: number }
+  >;
 };
 
 export type BaseReadiumViewProps = {

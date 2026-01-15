@@ -7,7 +7,7 @@ import com.reactnativereadium.utils.EventChannel
 import kotlinx.coroutines.channels.Channel
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
-import com.reactnativereadium.reader.PositionRange
+import com.reactnativereadium.utils.PositionRange
 import org.readium.r2.shared.publication.Link
 
 class ReaderViewModel(
