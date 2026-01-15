@@ -28,6 +28,7 @@ export const Reader: React.FC<ReaderProps> = ({
   const [preferences, setPreferences] = useState<ReadiumProps['preferences']>({
     theme: 'dark',
   });
+  const [hidePageNumbers, setHidePageNumbers] = useState<boolean>(false);
   const ref = useRef<any>(undefined);
 
   useEffect(() => {
@@ -90,6 +91,8 @@ export const Reader: React.FC<ReaderProps> = ({
             <PreferencesEditor
               preferences={preferences}
               onChange={setPreferences}
+              hidePageNumbers={hidePageNumbers}
+              onHidePageNumbersChange={setHidePageNumbers}
             />
           </View>
         </View>
@@ -107,6 +110,7 @@ export const Reader: React.FC<ReaderProps> = ({
               ref={ref}
               file={file}
               location={location}
+              hidePageNumbers={hidePageNumbers}
               preferences={preferences}
               onLocationChange={(locator: Locator) => setLocation(locator)}
               onTableOfContents={(toc: Link[] | null) => {
