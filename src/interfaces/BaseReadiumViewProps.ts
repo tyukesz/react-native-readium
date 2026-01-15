@@ -6,7 +6,7 @@ import type { File } from './File';
 export type TableOfContentsPayload = {
   toc: Link[];
   totalPositions: number | null;
-  positionsRanges?: Record<
+  positionsRanges: Record<
     string, // the key for this record is the href from ToC items
     { startPosition: number; endPosition: number }
   >;
