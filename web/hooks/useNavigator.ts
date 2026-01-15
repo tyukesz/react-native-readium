@@ -14,6 +14,7 @@ import {
 import { Fetcher } from '@readium/shared';
 import { HttpFetcher } from '@readium/shared';
 import { Link } from '@readium/shared';
+import type { Link as LocalLink } from '../../src/interfaces/Link';
 
 import type { ReadiumProps } from '../../src/components/ReadiumView';
 import { normalizeManifest } from '../utils/manifestNormalizer';
@@ -216,11 +217,20 @@ export const useNavigator = ({
       );
       await nav.load();
       if (onTableOfContents && manifest.toc) {
-        // Extract the items array from the toc Links object
-        const tocItems = Array.isArray(manifest.toc)
-          ? manifest.toc
-          : // @ts-ignore
-            manifest.toc.items || [];
+        // Extract the items array from the toc Links object and normalize to our local Link shape
+        const rawTocItems = Array.isArray(manifest.toc)
+          ? (manifest.toc as any[])
+          : (((manifest.toc as any).items ?? []) as any[]);
+
+        const normalizeLink = (l: any): LocalLink => {
+          const normalized: any = { ...l, templated: !!l.templated };
+          if (l.items && Array.isArray(l.items)) {
+            normalized.items = l.items.map(normalizeLink);
+          }
+          return normalized as LocalLink;
+        };
+
+        const tocItems: LocalLink[] = rawTocItems.map(normalizeLink);
         onTableOfContents({
           toc: tocItems,
           totalPositions: positions.length,
