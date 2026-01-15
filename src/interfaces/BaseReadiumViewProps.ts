@@ -3,6 +3,15 @@ import type { Link } from './Link';
 import type { Locator } from './Locator';
 import type { File } from './File';
 
+export type TableOfContentsPayload = {
+  toc: Link[];
+  totalPositions: number | null;
+  positionsRanges?: Record<
+    string, // the key for this record is the href from ToC items
+    { startPosition: number; endPosition: number }
+  >;
+};
+
 export type BaseReadiumViewProps = {
   file: File;
   location?: Locator | Link;
@@ -10,7 +19,7 @@ export type BaseReadiumViewProps = {
   hidePageNumbers?: boolean; // Show or hide native position label (iOS only for now)
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
-  onTableOfContents?: (toc: Link[] | null) => void;
+  onTableOfContents?: (payload: TableOfContentsPayload) => void;
   ref?: any;
   height?: number;
   width?: number;

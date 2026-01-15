@@ -185,14 +185,53 @@ class ReadiumView : UIView, Loggable {
       guard let self = self else { return }
 
       let tocResult = await vc.publication.tableOfContents()
+      let positionsResult = await vc.publication.positions()
+      let positions: [Locator]
+      let totalPositions: Int?
+      switch positionsResult {
+      case .success(let fetchedPositions):
+        positions = fetchedPositions
+        totalPositions = fetchedPositions.count
+      case .failure:
+        positions = []
+        totalPositions = nil
+      }
+
       switch tocResult {
       case .success(let links):
-        self.onTableOfContents?([
-          "toc": links.map { $0.json }
-        ])
+        let rangesByHref = PositionRangesUtil.getPositionRangesByChapter(
+          links: links,
+          positions: positions
+        )
+        let payload: [String: Any] = [
+          "toc": links.map { $0.json },
+          "totalPositions": totalPositions ?? NSNull(),
+          "positionsRanges": positionRangesJSON(rangesByHref)
+        ]
+        self.onTableOfContents?(payload)
       case .failure(let error):
         self.log(.error, "Failed to fetch table of contents: \(error)")
+        let payload: [String: Any] = [
+          "toc": [],
+          "totalPositions": totalPositions ?? NSNull(),
+          "positionsRanges": [:]
+        ]
+        self.onTableOfContents?(payload)
       }
     }
   }
 }
+
+private func positionRangesJSON(
+  _ ranges: [String: PositionRange]
+) -> [String: Any] {
+  var json: [String: Any] = [:]
+  for (href, range) in ranges {
+    json[href] = [
+      "startPosition": range.start,
+      "endPosition": range.end
+    ]
+  }
+  return json
+}
+

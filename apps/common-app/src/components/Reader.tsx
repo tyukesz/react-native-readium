@@ -1,7 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { StyleSheet, View, Text, Platform, DimensionValue } from 'react-native';
 import { ReadiumView } from 'react-native-readium';
-import type { Link, Locator, File, ReadiumProps } from 'react-native-readium';
+import type {
+  Link,
+  Locator,
+  File,
+  ReadiumProps,
+  TableOfContentsPayload,
+} from 'react-native-readium';
 
 import RNFS from '../utils/RNFS';
 import { ReaderButton } from './ReaderButton';
@@ -113,9 +119,9 @@ export const Reader: React.FC<ReaderProps> = ({
               hidePageNumbers={hidePageNumbers}
               preferences={preferences}
               onLocationChange={(locator: Locator) => setLocation(locator)}
-              onTableOfContents={(toc: Link[] | null) => {
-                if (toc) {
-                  setToc(toc);
+              onTableOfContents={(payload: TableOfContentsPayload) => {
+                if (payload.toc) {
+                  setToc(payload.toc);
                 }
               }}
             />

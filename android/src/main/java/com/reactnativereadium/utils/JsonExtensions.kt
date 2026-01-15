@@ -8,6 +8,17 @@ import org.json.JSONObject
 import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 
+internal fun Map<String, PositionRange>.toWritableMap(): WritableMap =
+  Arguments.createMap().apply {
+    forEach { (href, range) ->
+      val rangeMap = Arguments.createMap().apply {
+        putInt("startPosition", range.start)
+        putInt("endPosition", range.end)
+      }
+      putMap(href, rangeMap)
+    }
+  }
+
 internal fun Locator.toWritableMap(): WritableMap =
   toJSON().toWritableMap()
 

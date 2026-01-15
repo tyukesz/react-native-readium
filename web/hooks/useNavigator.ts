@@ -221,8 +221,11 @@ export const useNavigator = ({
           ? manifest.toc
           : // @ts-ignore
             manifest.toc.items || [];
-        // @ts-ignore - Type compatibility
-        onTableOfContents(tocItems);
+        onTableOfContents({
+          toc: tocItems,
+          totalPositions: positions.length,
+          positionsRanges: {}, // We don't have position ranges here
+        });
       }
 
       setNavigator(nav);

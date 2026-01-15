@@ -8,10 +8,16 @@ import type { File } from './interfaces/File';
 import type { Link } from './interfaces/Link';
 import type { Locator } from './interfaces/Locator';
 
+type PositionsRanges = Readonly<
+  Record<string, Readonly<{ startPosition: number; endPosition: number }>>
+>;
+
 // Event types for native events
 type OnLocationChangeEvent = Readonly<Locator>;
 type OnTableOfContentsEvent = Readonly<{
-  toc: ReadonlyArray<Link> | null;
+  toc: ReadonlyArray<Link>;
+  totalPositions: number | null;
+  positionsRanges: PositionsRanges;
 }>;
 
 // Native component props interface

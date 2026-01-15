@@ -100,7 +100,20 @@ class ReadiumView(
         }
         is ReaderViewModel.Event.TableOfContentsLoaded -> {
           val payload = Arguments.createMap().apply {
-            putArray("toc", event.toc.toWritableArray())
+            putArray(
+              "toc",
+              event.toc.toWritableArray()
+            )
+            if (event.totalPositions != null) {
+              putInt("totalPositions", event.totalPositions)
+            } else {
+              putNull("totalPositions")
+            }
+
+            putMap(
+              "positionsRanges",
+              event.positionsRanges.toWritableMap()
+            )
           }
           dispatch(ReadiumViewManager.ON_TABLE_OF_CONTENTS, payload)
         }

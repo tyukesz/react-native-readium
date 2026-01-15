@@ -7,6 +7,7 @@ import com.reactnativereadium.utils.EventChannel
 import kotlinx.coroutines.channels.Channel
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
+import com.reactnativereadium.utils.PositionRange
 import org.readium.r2.shared.publication.Link
 
 class ReaderViewModel(
@@ -32,7 +33,11 @@ class ReaderViewModel(
     }
 
     sealed class Event {
-        class LocatorUpdate(val locator: Locator) : Event()
-        class TableOfContentsLoaded(val toc: List<Link>) : Event()
+      class LocatorUpdate(val locator: Locator) : Event()
+      class TableOfContentsLoaded(
+        val toc: List<Link>,
+        val totalPositions: Int?,
+        val positionsRanges: Map<String, PositionRange>
+      ) : Event()
     }
 }

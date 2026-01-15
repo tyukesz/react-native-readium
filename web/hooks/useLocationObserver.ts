@@ -12,12 +12,14 @@ export const useLocationObserver = (
 
   useDeepCompareEffect(() => {
     // Only navigate if we have a navigator, a location, and the href has changed.
-    // Skip navigation if location.locations exists with progression and totalProgression
-    // (it's from the navigator's positionChanged callback)
-    // @ts-ignore
-    const hasFullLocationData =
-      location?.locations?.progression !== undefined &&
-      location?.locations?.totalProgression !== undefined;
+    // Skip navigation if `location` is a Locator with `locations.progression` and
+    // `locations.totalProgression` (i.e. it's coming from the navigator).
+    const hasFullLocationData = !!(
+      location &&
+      'locations' in location &&
+      (location as Locator).locations?.progression !== undefined &&
+      (location as Locator).locations?.totalProgression !== undefined
+    );
 
     if (
       navigator &&
