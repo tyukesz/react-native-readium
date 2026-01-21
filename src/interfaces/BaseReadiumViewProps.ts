@@ -3,6 +3,7 @@ import type { Link } from './Link';
 import type { Locator } from './Locator';
 import type { File } from './File';
 import type { PublicationReadyEvent } from './PublicationReady';
+import type { TapEvent } from './TapEvent';
 
 export type BaseReadiumViewProps = {
   file: File;
@@ -11,6 +12,7 @@ export type BaseReadiumViewProps = {
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
   onPublicationReady?: (event: PublicationReadyEvent) => void;
+  onTap?: (event: TapEvent) => void; // Native only.
   ref?: any;
   height?: number;
   width?: number;
