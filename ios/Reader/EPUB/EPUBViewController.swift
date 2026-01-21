@@ -59,14 +59,6 @@ class EPUBViewController: ReaderViewController {
 
 extension EPUBViewController: EPUBNavigatorDelegate {}
 
-extension EPUBViewController: UIGestureRecognizerDelegate {
-
-  func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-    return true
-  }
-
-}
-
 extension EPUBViewController: UIPopoverPresentationControllerDelegate {
   // Prevent the popOver to be presented fullscreen on iPhones.
   func adaptivePresentationStyle(for controller: UIPresentationController, traitCollection: UITraitCollection) -> UIModalPresentationStyle
