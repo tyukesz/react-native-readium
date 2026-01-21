@@ -26,6 +26,7 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
     {
       onLocationChange: wrappedOnLocationChange,
       onPublicationReady: wrappedOnPublicationReady,
+      onTap: wrappedOnTap,
       preferences,
       ...props
     },
@@ -71,6 +72,15 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       [wrappedOnPublicationReady]
     );
 
+    const onTap = useCallback(
+      (event: any) => {
+        if (wrappedOnTap) {
+          wrappedOnTap(event.nativeEvent);
+        }
+      },
+      [wrappedOnTap]
+    );
+
     // create the view fragment on android
     useEffect(() => {
       if (Platform.OS === 'android' && defaultRef.current) {
@@ -102,6 +112,7 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
           preferences={stringifiedPreferences}
           onLocationChange={onLocationChange}
           onPublicationReady={onPublicationReady}
+          onTap={onTap}
           ref={defaultRef}
         />
       </View>
