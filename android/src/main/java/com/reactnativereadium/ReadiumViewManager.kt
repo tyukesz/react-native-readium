@@ -42,6 +42,13 @@ class ReadiumViewManager(
           MapBuilder.of("bubbled", ON_PUBLICATION_READY)
         )
       )
+      .put(
+        ON_TAP,
+        MapBuilder.of(
+          "phasedRegistrationNames",
+          MapBuilder.of("bubbled", ON_TAP)
+        )
+      )
       .build()
   }
 
@@ -146,5 +153,6 @@ class ReadiumViewManager(
     private const val TAG = "ReadiumViewManager"
     var ON_LOCATION_CHANGE = "onLocationChange"
     var ON_PUBLICATION_READY = "onPublicationReady"
+    var ON_TAP = "onTap"
   }
 }

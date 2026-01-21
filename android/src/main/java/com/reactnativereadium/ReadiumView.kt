@@ -2,10 +2,13 @@ package com.reactnativereadium
 
 import android.util.Log
 import android.view.Choreographer
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import androidx.fragment.app.FragmentActivity
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.uimanager.PixelUtil
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
@@ -36,6 +39,21 @@ class ReadiumView(
   var isFragmentAdded: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
   private var frameCallback: Choreographer.FrameCallback? = null
+  private var tapDispatch: ((String, WritableMap?) -> Unit)? = null
+
+  private val gestureDetector = GestureDetector(
+    reactContext,
+    object : GestureDetector.SimpleOnGestureListener() {
+      override fun onDown(e: MotionEvent): Boolean {
+        return true
+      }
+
+      override fun onSingleTapUp(e: MotionEvent): Boolean {
+        tapDispatch?.let { dispatchTapEvent(e, it) }
+        return true
+      }
+    }
+  )
 
   fun updateLocation(location: LinkOrLocator) : Boolean {
     if (fragment == null) {
@@ -79,7 +97,6 @@ class ReadiumView(
     )
 
     val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
-
     val dispatch: (String, WritableMap?) -> Unit = { eventName, payload ->
       if (eventDispatcher != null) {
         eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
@@ -87,6 +104,9 @@ class ReadiumView(
         Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
       }
     }
+
+    // Store dispatch for tap events
+    tapDispatch = dispatch
 
     // subscribe to reader events
     frag.channel.receive(frag) { event ->
@@ -131,6 +151,21 @@ class ReadiumView(
       }
     }
     frameCallback?.let { Choreographer.getInstance().postFrameCallback(it) }
+  }
+
+  private fun dispatchTapEvent(event: MotionEvent, dispatch: (String, WritableMap?) -> Unit) {
+    val x = PixelUtil.toDIPFromPixel(event.x)
+    val y = PixelUtil.toDIPFromPixel(event.y)
+    val payload = Arguments.createMap().apply {
+      putDouble("x", x.toDouble())
+      putDouble("y", y.toDouble())
+    }
+    dispatch(ReadiumViewManager.ON_TAP, payload)
+  }
+
+  override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+    gestureDetector.onTouchEvent(ev)
+    return super.dispatchTouchEvent(ev)
   }
 
   override fun onDetachedFromWindow() {
