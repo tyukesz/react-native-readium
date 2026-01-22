@@ -22,8 +22,7 @@ import com.reactnativereadium.utils.LinkOrLocator
 import com.reactnativereadium.utils.MetadataNormalizer
 import com.reactnativereadium.utils.toWritableArray
 import com.reactnativereadium.utils.toWritableMap
-import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.navigator.epub.EpubPreferences
+
 
 class ReadiumView(
   val reactContext: ThemedReactContext
@@ -39,7 +38,7 @@ class ReadiumView(
   var isFragmentAdded: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
   private var frameCallback: Choreographer.FrameCallback? = null
-  private var tapDispatch: ((String, WritableMap?) -> Unit)? = null
+  
 
   private val gestureDetector = GestureDetector(
     reactContext,
@@ -49,18 +48,14 @@ class ReadiumView(
       }
 
       override fun onSingleTapUp(e: MotionEvent): Boolean {
-        tapDispatch?.let { dispatchTapEvent(e, it) }
+        dispatchTapEvent(e)
         return true
       }
     }
   )
 
   fun updateLocation(location: LinkOrLocator) : Boolean {
-    if (fragment == null) {
-      return false
-    } else {
-      return this.fragment!!.go(location, true)
-    }
+    return fragment?.go(location, true) ?: false
   }
 
   fun updatePreferencesFromJsonString(preferences: String?) {
@@ -69,9 +64,7 @@ class ReadiumView(
       return
     }
 
-    if (fragment is EpubReaderFragment) {
-      (fragment as EpubReaderFragment).updatePreferencesFromJsonString(preferences)
-    }
+    (fragment as? EpubReaderFragment)?.updatePreferencesFromJsonString(preferences)
   }
 
   fun addFragment(frag: BaseReaderFragment) {
@@ -83,12 +76,15 @@ class ReadiumView(
     isFragmentAdded = true
     setupLayout()
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
-    val activity: FragmentActivity? = reactContext.currentActivity as FragmentActivity?
-
-    activity!!.supportFragmentManager
-      .beginTransaction()
-      .replace(this.id, frag, this.id.toString())
-      .commitNow()
+    val activity = reactContext.currentActivity as? FragmentActivity
+    if (activity == null) {
+      Log.w(TAG, "Current activity is not a FragmentActivity; cannot add fragment")
+    } else {
+      activity.supportFragmentManager
+        .beginTransaction()
+        .replace(this.id, frag, this.id.toString())
+        .commitNow()
+    }
 
     // Ensure the fragment's view fills the container
     frag.view?.layoutParams = FrameLayout.LayoutParams(
@@ -96,19 +92,9 @@ class ReadiumView(
       FrameLayout.LayoutParams.MATCH_PARENT
     )
 
-    val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
-    val dispatch: (String, WritableMap?) -> Unit = { eventName, payload ->
-      if (eventDispatcher != null) {
-        eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
-      } else {
-        Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
-      }
-    }
-
-    // Store dispatch for tap events
-    tapDispatch = dispatch
-
     // subscribe to reader events
+    val dispatch: (String, WritableMap?) -> Unit = { eventName, payload -> sendEvent(eventName, payload) }
+
     frag.channel.receive(frag) { event ->
       when (event) {
         is ReaderViewModel.Event.LocatorUpdate -> {
@@ -129,6 +115,15 @@ class ReadiumView(
           dispatch(ReadiumViewManager.ON_PUBLICATION_READY, payload)
         }
       }
+    }
+  }
+
+  private fun sendEvent(eventName: String, payload: WritableMap?) {
+    val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
+    if (eventDispatcher != null) {
+      eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
+    } else {
+      Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
     }
   }
 
@@ -153,14 +148,15 @@ class ReadiumView(
     frameCallback?.let { Choreographer.getInstance().postFrameCallback(it) }
   }
 
-  private fun dispatchTapEvent(event: MotionEvent, dispatch: (String, WritableMap?) -> Unit) {
+  private fun dispatchTapEvent(event: MotionEvent) {
     val x = PixelUtil.toDIPFromPixel(event.x)
     val y = PixelUtil.toDIPFromPixel(event.y)
     val payload = Arguments.createMap().apply {
       putDouble("x", x.toDouble())
       putDouble("y", y.toDouble())
     }
-    dispatch(ReadiumViewManager.ON_TAP, payload)
+
+    sendEvent(ReadiumViewManager.ON_TAP, payload)
   }
 
   override fun dispatchTouchEvent(ev: MotionEvent): Boolean {

@@ -12,7 +12,7 @@ export type BaseReadiumViewProps = {
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
   onPublicationReady?: (event: PublicationReadyEvent) => void;
-  onTap?: (event: TapEvent) => void; // Native only.
+  onTap?: (event: TapEvent) => void;
   ref?: any;
   height?: number;
   width?: number;
