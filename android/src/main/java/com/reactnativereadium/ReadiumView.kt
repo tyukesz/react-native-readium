@@ -2,10 +2,13 @@ package com.reactnativereadium
 
 import android.util.Log
 import android.view.Choreographer
+import android.view.GestureDetector
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import androidx.fragment.app.FragmentActivity
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
+import com.facebook.react.uimanager.PixelUtil
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
@@ -19,8 +22,7 @@ import com.reactnativereadium.utils.LinkOrLocator
 import com.reactnativereadium.utils.MetadataNormalizer
 import com.reactnativereadium.utils.toWritableArray
 import com.reactnativereadium.utils.toWritableMap
-import org.readium.r2.navigator.epub.EpubNavigatorFragment
-import org.readium.r2.navigator.epub.EpubPreferences
+
 
 class ReadiumView(
   val reactContext: ThemedReactContext
@@ -36,13 +38,24 @@ class ReadiumView(
   var isFragmentAdded: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
   private var frameCallback: Choreographer.FrameCallback? = null
+  
+
+  private val gestureDetector = GestureDetector(
+    reactContext,
+    object : GestureDetector.SimpleOnGestureListener() {
+      override fun onDown(e: MotionEvent): Boolean {
+        return true
+      }
+
+      override fun onSingleTapUp(e: MotionEvent): Boolean {
+        dispatchTapEvent(e)
+        return true
+      }
+    }
+  )
 
   fun updateLocation(location: LinkOrLocator) : Boolean {
-    if (fragment == null) {
-      return false
-    } else {
-      return this.fragment!!.go(location, true)
-    }
+    return fragment?.go(location, true) ?: false
   }
 
   fun updatePreferencesFromJsonString(preferences: String?) {
@@ -51,9 +64,7 @@ class ReadiumView(
       return
     }
 
-    if (fragment is EpubReaderFragment) {
-      (fragment as EpubReaderFragment).updatePreferencesFromJsonString(preferences)
-    }
+    (fragment as? EpubReaderFragment)?.updatePreferencesFromJsonString(preferences)
   }
 
   fun addFragment(frag: BaseReaderFragment) {
@@ -65,12 +76,15 @@ class ReadiumView(
     isFragmentAdded = true
     setupLayout()
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
-    val activity: FragmentActivity? = reactContext.currentActivity as FragmentActivity?
-
-    activity!!.supportFragmentManager
-      .beginTransaction()
-      .replace(this.id, frag, this.id.toString())
-      .commitNow()
+    val activity = reactContext.currentActivity as? FragmentActivity
+    if (activity == null) {
+      Log.w(TAG, "Current activity is not a FragmentActivity; cannot add fragment")
+    } else {
+      activity.supportFragmentManager
+        .beginTransaction()
+        .replace(this.id, frag, this.id.toString())
+        .commitNow()
+    }
 
     // Ensure the fragment's view fills the container
     frag.view?.layoutParams = FrameLayout.LayoutParams(
@@ -78,17 +92,9 @@ class ReadiumView(
       FrameLayout.LayoutParams.MATCH_PARENT
     )
 
-    val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
-
-    val dispatch: (String, WritableMap?) -> Unit = { eventName, payload ->
-      if (eventDispatcher != null) {
-        eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
-      } else {
-        Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
-      }
-    }
-
     // subscribe to reader events
+    val dispatch: (String, WritableMap?) -> Unit = { eventName, payload -> sendEvent(eventName, payload) }
+
     frag.channel.receive(frag) { event ->
       when (event) {
         is ReaderViewModel.Event.LocatorUpdate -> {
@@ -112,6 +118,15 @@ class ReadiumView(
     }
   }
 
+  private fun sendEvent(eventName: String, payload: WritableMap?) {
+    val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
+    if (eventDispatcher != null) {
+      eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
+    } else {
+      Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
+    }
+  }
+
   // Custom event class for new architecture
   private class ReadiumEvent(
     viewTag: Int,
@@ -131,6 +146,22 @@ class ReadiumView(
       }
     }
     frameCallback?.let { Choreographer.getInstance().postFrameCallback(it) }
+  }
+
+  private fun dispatchTapEvent(event: MotionEvent) {
+    val x = PixelUtil.toDIPFromPixel(event.x)
+    val y = PixelUtil.toDIPFromPixel(event.y)
+    val payload = Arguments.createMap().apply {
+      putDouble("x", x.toDouble())
+      putDouble("y", y.toDouble())
+    }
+
+    sendEvent(ReadiumViewManager.ON_TAP, payload)
+  }
+
+  override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+    gestureDetector.onTouchEvent(ev)
+    return super.dispatchTouchEvent(ev)
   }
 
   override fun onDetachedFromWindow() {
