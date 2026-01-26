@@ -7,10 +7,12 @@ import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativ
 import type { File } from './interfaces/File';
 import type { Locator } from './interfaces/Locator';
 import type { PublicationReadyEvent } from './interfaces/PublicationReady';
+import type { TapEvent } from './interfaces/TapEvent';
 
 // Event types for native events
 type OnLocationChangeEvent = Readonly<Locator>;
 type OnPublicationReadyEvent = Readonly<PublicationReadyEvent>;
+type OnTapEvent = Readonly<TapEvent>;
 
 // Native component props interface
 export interface NativeProps extends ViewProps {
@@ -18,6 +20,7 @@ export interface NativeProps extends ViewProps {
   preferences?: string;
   onLocationChange?: DirectEventHandler<OnLocationChangeEvent>;
   onPublicationReady?: DirectEventHandler<OnPublicationReadyEvent>;
+  onTap?: DirectEventHandler<OnTapEvent>;
 }
 
 // Native commands interface

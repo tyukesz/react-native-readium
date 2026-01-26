@@ -249,6 +249,7 @@ DRM is not supported at this time. However, there is a clear path to [support it
 | `style`    | `ViewStyle`          | :white_check_mark: | A traditional style object. |
 | `onLocationChange` | `(locator: Locator) => void` | :white_check_mark: | A callback that fires whenever the location is changed (e.g. the user transitions to a new page)|
 | `onPublicationReady` | `(event: PublicationReadyEvent) => void` | :white_check_mark: | A callback that fires once the publication is loaded and provides access to the table of contents, positions, and metadata. See the [`PublicationReadyEvent`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/PublicationReady.ts) interface for details. |
+| `onTap` | `(event: TapEvent) => void` | :white_check_mark: | Native only. Fires when the reader view is tapped; provides `x`/`y` coordinates in view space (React Native points). See [`TapEvent`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/TapEvent.ts). |
 
 #### :warning: Web vs Native File URLs
 

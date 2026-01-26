@@ -35,6 +35,7 @@ class ReadiumView : UIView, Loggable {
   }
   @objc var onLocationChange: RCTDirectEventBlock?
   @objc var onPublicationReady: RCTDirectEventBlock?
+  @objc var onTap: RCTDirectEventBlock?
 
   func loadBook(
     url: String,
@@ -130,6 +131,12 @@ class ReadiumView : UIView, Loggable {
     .store(in: &self.subscriptions)
 
     readerViewController = vc
+    readerViewController?.onTap = { [weak self] point in
+      self?.onTap?([
+        "x": point.x,
+        "y": point.y
+      ])
+    }
 
     // if the controller was just instantiated then apply any existing preferences
     if (preferences != nil) {

@@ -25,6 +25,14 @@ class ReaderViewController: UIViewController, Loggable {
   private var positionsLoadingTask: Task<Void, Never>?
   private var lastKnownLocator: Locator?
   private var navigatorInputObserverTokens = Set<InputObservableToken>()
+  var onTap: ((CGPoint) -> Void)?
+
+  private lazy var tapGestureRecognizer: UITapGestureRecognizer = {
+    let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleViewTap(_:)))
+    recognizer.cancelsTouchesInView = false
+    recognizer.delegate = self
+    return recognizer
+  }()
 
   /// This regex matches any string with at least 2 consecutive letters (not limited to ASCII).
   /// It's used when evaluating whether to display the body of a noteref referrer as the note's title.
@@ -101,6 +109,7 @@ class ReaderViewController: UIViewController, Loggable {
     ])
 
     configureNavigatorInteractions()
+    view.addGestureRecognizer(tapGestureRecognizer)
   }
 
   override func willMove(toParent parent: UIViewController?) {
@@ -241,6 +250,15 @@ class ReaderViewController: UIViewController, Loggable {
     toggleToken.store(in: &navigatorInputObserverTokens)
   }
 
+  @objc private func handleViewTap(_ recognizer: UITapGestureRecognizer) {
+    guard recognizer.state == .ended else {
+      return
+    }
+
+    let point = recognizer.location(in: view)
+    onTap?(point)
+  }
+
   private func removeNavigatorInputObservers() {
     guard
       let visualNavigator = navigator as? VisualNavigator
@@ -275,6 +293,15 @@ class ReaderViewController: UIViewController, Loggable {
     _ = await navigator.goForward(options: .animated)
   }
 
+}
+
+extension ReaderViewController: UIGestureRecognizerDelegate {
+  func gestureRecognizer(
+    _ gestureRecognizer: UIGestureRecognizer,
+    shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer
+  ) -> Bool {
+    return true
+  }
 }
 
 extension ReaderViewController: NavigatorDelegate {
