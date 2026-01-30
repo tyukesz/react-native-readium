@@ -8803,7 +8803,7 @@ __metadata:
     react-native: 0.83.1
     react-native-clean-project: ^4.0.1
     react-native-fs: ^2.20.0
-    react-native-readium: "workspace:*"
+    react-native-readium: "*"
     react-native-safe-area-context: ^5.6.2
     react-native-screens: ^4.19.0
     react-native-vector-icons: ^9.1.0
@@ -8834,7 +8834,7 @@ __metadata:
     react-dom: 19.0.0
     react-native: 0.83.1
     react-native-fs: ^2.20.0
-    react-native-readium: "workspace:*"
+    react-native-readium: "*"
     react-native-safe-area-context: ^5.6.2
     react-native-screens: ^4.19.0
     react-native-vector-icons: ^9.1.0
@@ -14601,7 +14601,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-native-readium@workspace:*, react-native-readium@workspace:.":
+"react-native-readium@*, react-native-readium@workspace:.":
   version: 0.0.0-use.local
   resolution: "react-native-readium@workspace:."
   dependencies:

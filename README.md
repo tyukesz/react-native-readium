@@ -239,6 +239,68 @@ DRM is not supported at this time. However, there is a clear path to [support it
 
 ## API
 
+## Highlight & Sentence APIs
+
+Quick reference for the sentence-extraction and highlighting primitives exported by the JS API.
+
+- Import (named functions):
+
+```ts
+import {
+  highlightRange,
+  highlightSentence,
+  highlightSentenceFromProgression,
+  getChapterSentencePage,
+  getChapterSentences,
+  getSentenceIndexFromProgression,
+  clearHighlight,
+} from 'react-native-readium'
+```
+
+- Notes:
+  - The JS API prefers a single named-arguments object for calls that have multiple parameters. Example: `highlightSentence(ref, { href, sentenceIndex, style })`.
+  - Style-aware native methods are optional on older native installs. When a `style` is provided and the native side supports it, the library will call the style-aware native entrypoint automatically. If not available, the call falls back to the default platform highlight style and a warning is logged.
+
+- `HighlightStyle` (optional):
+  - `tint?: string` — Hex color string: `"#RRGGBB"`, `"#AARRGGBB"`, or `"0xAARRGGBB"`.
+  - `isActive?: boolean` — Platform-dependent flag that controls active vs inactive decoration appearance. (if `true` then the text is underlined)
+
+- Functions & behavior (short):
+  - `highlightRange(viewRef, { href, startProgression, endProgression, style? })` — Best-effort highlight across a progression range.
+  - `highlightSentence(viewRef, { href, sentenceIndex, style? })` — Highlight the given sentence index.
+  - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
+  - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
+  - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
+  - `getSentenceIndexFromProgression(viewRef, { href, progression })` — Promise<number> mapping a progression (0..1) into a sentence index.
+  - `clearHighlight(viewRef)` — Removes any active highlight decorations.
+
+- Examples:
+
+```ts
+// Highlight a sentence with a hex tint string
+highlightSentence(ref, { href: 'text/chapter-1.xhtml', sentenceIndex: 0, style: { tint: '#00FF00', isActive: true } })
+
+// Highlight a progression range with a hex ARGB string
+highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endProgression: 0.12, style: { tint: '#80FF0000' } })
+
+// Highlight sentence nearest to progression and get its index
+const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
+
+// Page sentences (total + items)
+const page = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 50 })
+console.log(page.total, page.items)
+
+// Get all sentences as strings
+const sentences = await getChapterSentences(ref, 'text/chapter-1.xhtml')
+
+// Map progression -> sentence index
+const idx2 = await getSentenceIndexFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.5 })
+
+// Clear active highlight
+clearHighlight(ref)
+```
+
+
 #### View Props
 
 | Name | Type | Optional | Description |
