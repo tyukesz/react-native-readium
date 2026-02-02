@@ -15,14 +15,14 @@ import {
   getSentenceIndexFromProgression,
   highlightSentence,
   clearHighlight as clearNativeHighlight,
-} from 'react-native-readium';
+} from '@tyukesz/react-native-readium';
 import type {
   Link,
   Locator,
   File,
   ReadiumProps,
   PublicationReadyEvent,
-} from 'react-native-readium';
+} from '@tyukesz/react-native-readium';
 
 import RNFS from '../utils/RNFS';
 import { ReaderButton } from './ReaderButton';

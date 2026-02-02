@@ -10,10 +10,10 @@
     "@react-navigation/native-stack": "*",
     "@rneui/base": "*",
     "@rneui/themed": "*",
+    "@tyukesz/react-native-readium": "*",
     "react": "*",
     "react-native": "*",
     "react-native-fs": "*",
-    "react-native-readium": "*",
     "react-native-safe-area-context": "*",
     "react-native-screens": "*",
     "react-native-vector-icons": "*"

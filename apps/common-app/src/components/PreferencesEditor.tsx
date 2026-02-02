@@ -2,8 +2,8 @@ import React, { useState, useCallback } from 'react';
 import { Text, ScrollView } from 'react-native';
 import { ListItem, Overlay, Icon, Button } from '@rneui/themed';
 import Slider from '@react-native-community/slider';
-import type { ReadiumProps } from 'react-native-readium';
-import { RANGES } from 'react-native-readium';
+import type { ReadiumProps } from '@tyukesz/react-native-readium';
+import { RANGES } from '@tyukesz/react-native-readium';
 
 interface Props {
   preferences: ReadiumProps['preferences'];

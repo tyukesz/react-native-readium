@@ -3,7 +3,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 import { Reader, RNFS } from 'common-app';
-import type { Link, Locator } from 'react-native-readium';
+import type { Link, Locator } from '@tyukesz/react-native-readium';
 
 import { TableOfContentsScreen } from './TableOfContentsScreen';
 

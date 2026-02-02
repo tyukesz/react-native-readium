@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
-import type { Link, Locator } from 'react-native-readium';
+import type { Link, Locator } from '@tyukesz/react-native-readium';
 
 import { TableOfContents } from 'common-app';
 

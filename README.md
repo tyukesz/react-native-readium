@@ -1,6 +1,6 @@
-# react-native-readium
+# @tyukesz/react-native-readium
 
-[![NPM version](https://img.shields.io/npm/v/react-native-readium.svg?color=success&label=npm%20package&logo=npm)](https://www.npmjs.com/package/react-native-readium)
+[![NPM version](https://img.shields.io/npm/v/%40tyukesz%2Freact-native-readium.svg?color=success&label=npm%20package&logo=npm)](https://www.npmjs.com/package/@tyukesz/react-native-readium)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
 ![PRs welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 ![This project is released under the MIT license](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -60,13 +60,13 @@ allows you to do things like:
 **NPM**
 
 ```sh
-npm install react-native-readium
+npm install @tyukesz/react-native-readium
 ```
 
 **Yarn**
 
 ```sh
-yarn add react-native-readium
+yarn add @tyukesz/react-native-readium
 ```
 
 #### iOS
@@ -168,8 +168,8 @@ they persist across builds.
 
 ```tsx
 import React, { useState } from 'react';
-import { ReadiumView } from 'react-native-readium';
-import type { File } from 'react-native-readium';
+import { ReadiumView } from '@tyukesz/react-native-readium';
+import type { File } from '@tyukesz/react-native-readium';
 
 const MyComponent: React.FC = () => {
   const [file] = useState<File>({
@@ -190,8 +190,8 @@ Access the table of contents, positions, and metadata when the publication is re
 
 ```tsx
 import React, { useState } from 'react';
-import { ReadiumView } from 'react-native-readium';
-import type { File, PublicationReadyEvent } from 'react-native-readium';
+import { ReadiumView } from '@tyukesz/react-native-readium';
+import type { File, PublicationReadyEvent } from '@tyukesz/react-native-readium';
 
 const MyComponent: React.FC = () => {
   const [file] = useState<File>({
@@ -254,7 +254,7 @@ import {
   getChapterSentences,
   getSentenceIndexFromProgression,
   clearHighlight,
-} from 'react-native-readium'
+} from '@tyukesz/react-native-readium'
 ```
 
 - Notes:

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Text, ScrollView, View } from 'react-native';
 import { ListItem } from '@rneui/themed';
-import type { Link } from 'react-native-readium';
+import type { Link } from '@tyukesz/react-native-readium';
 
 export interface TableOfContentsProps {
   items?: Link[] | null;

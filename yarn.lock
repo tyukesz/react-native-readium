@@ -5325,6 +5325,44 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tyukesz/react-native-readium@workspace:*, @tyukesz/react-native-readium@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "@tyukesz/react-native-readium@workspace:."
+  dependencies:
+    "@commitlint/config-conventional": ^17.0.2
+    "@evilmartians/lefthook": ^1.5.0
+    "@react-native/eslint-config": 0.83.0
+    "@readium/css": ^2.0.0-beta.24
+    "@readium/navigator": ^2.2.5
+    "@readium/navigator-html-injectables": ^2.2.2
+    "@readium/shared": ^2.1.2
+    "@release-it/conventional-changelog": ^5.0.0
+    "@types/jest": ^29.5.13
+    "@types/react": ^19.2.0
+    commitlint: ^17.0.2
+    conventional-changelog-cli: ^2.2.2
+    del-cli: ^5.1.0
+    eslint: ^8.19.0
+    eslint-config-prettier: ^9.0.0
+    eslint-plugin-prettier: ^5.0.1
+    husky: ^6.0.0
+    jest: ^29.6.3
+    pod-install: ^0.1.0
+    prettier: 2.8.8
+    react: 19.0.0
+    react-native: 0.83.1
+    react-native-builder-bob: ^0.23.2
+    release-it: ^15.0.0
+    rimraf: ^5.0.7
+    turbo: ^1.10.7
+    typescript: ^5.8.3
+    use-deep-compare: ^1.1.0
+  peerDependencies:
+    react: "*"
+    react-native: "*"
+  languageName: unknown
+  linkType: soft
+
 "@ungap/structured-clone@npm:^1.2.0, @ungap/structured-clone@npm:^1.3.0":
   version: 1.3.0
   resolution: "@ungap/structured-clone@npm:1.3.0"
@@ -7014,10 +7052,10 @@ __metadata:
     "@react-navigation/native-stack": "*"
     "@rneui/base": "*"
     "@rneui/themed": "*"
+    "@tyukesz/react-native-readium": "*"
     react: "*"
     react-native: "*"
     react-native-fs: "*"
-    react-native-readium: "*"
     react-native-safe-area-context: "*"
     react-native-screens: "*"
     react-native-vector-icons: "*"
@@ -8794,6 +8832,7 @@ __metadata:
     "@types/jest": ^29.5.13
     "@types/react": ^19.2.0
     "@types/react-test-renderer": ^19.1.0
+    "@tyukesz/react-native-readium": "workspace:*"
     babel-plugin-module-resolver: ^4.0.0
     common-app: "workspace:*"
     eslint: ^8.19.0
@@ -8803,7 +8842,6 @@ __metadata:
     react-native: 0.83.1
     react-native-clean-project: ^4.0.1
     react-native-fs: ^2.20.0
-    react-native-readium: "*"
     react-native-safe-area-context: ^5.6.2
     react-native-screens: ^4.19.0
     react-native-vector-icons: ^9.1.0
@@ -8824,6 +8862,7 @@ __metadata:
     "@react-navigation/native-stack": ^7.2.1
     "@rneui/base": ^4.0.0-rc.8
     "@rneui/themed": ^4.0.0-rc.8
+    "@tyukesz/react-native-readium": "workspace:*"
     common-app: "workspace:*"
     eslint: 9.37.0
     expo: 54.0.13
@@ -8834,7 +8873,6 @@ __metadata:
     react-dom: 19.0.0
     react-native: 0.83.1
     react-native-fs: ^2.20.0
-    react-native-readium: "*"
     react-native-safe-area-context: ^5.6.2
     react-native-screens: ^4.19.0
     react-native-vector-icons: ^9.1.0
@@ -14600,44 +14638,6 @@ __metadata:
   checksum: 34aa4e7ff09e537d5c8fb5b5bc98470c0723d7c0fff8954e39de371cdfa5ae3aa4af636ea44d508751f5dcaca6f80ee363fffd9c34a1bd8d8f7a9d8a23d82d15
   languageName: node
   linkType: hard
-
-"react-native-readium@*, react-native-readium@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "react-native-readium@workspace:."
-  dependencies:
-    "@commitlint/config-conventional": ^17.0.2
-    "@evilmartians/lefthook": ^1.5.0
-    "@react-native/eslint-config": 0.83.0
-    "@readium/css": ^2.0.0-beta.24
-    "@readium/navigator": ^2.2.5
-    "@readium/navigator-html-injectables": ^2.2.2
-    "@readium/shared": ^2.1.2
-    "@release-it/conventional-changelog": ^5.0.0
-    "@types/jest": ^29.5.13
-    "@types/react": ^19.2.0
-    commitlint: ^17.0.2
-    conventional-changelog-cli: ^2.2.2
-    del-cli: ^5.1.0
-    eslint: ^8.19.0
-    eslint-config-prettier: ^9.0.0
-    eslint-plugin-prettier: ^5.0.1
-    husky: ^6.0.0
-    jest: ^29.6.3
-    pod-install: ^0.1.0
-    prettier: 2.8.8
-    react: 19.0.0
-    react-native: 0.83.1
-    react-native-builder-bob: ^0.23.2
-    release-it: ^15.0.0
-    rimraf: ^5.0.7
-    turbo: ^1.10.7
-    typescript: ^5.8.3
-    use-deep-compare: ^1.1.0
-  peerDependencies:
-    react: "*"
-    react-native: "*"
-  languageName: unknown
-  linkType: soft
 
 "react-native-safe-area-context@npm:^5.6.2":
   version: 5.6.2
