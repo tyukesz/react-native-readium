@@ -1,5 +1,5 @@
-import React from 'react';
-import { Text, ScrollView, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { Text, ScrollView, View, StyleSheet } from 'react-native';
 import { ListItem } from '@rneui/themed';
 import type { Link } from '@tyukesz/react-native-readium';
 
@@ -14,33 +14,51 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({
   onPress,
   title = 'Table of Contents',
 }) => {
-  const items = externalItems || [];
+  const items = useMemo(() => externalItems || [], [externalItems]);
+  const handlePress = useCallback(
+    (item: Link) => {
+      if (onPress) onPress(item);
+    },
+    [onPress]
+  );
 
   return (
-    <View style={{ flex: 1 }}>
-      <Text style={{ fontSize: 18, fontWeight: '600', marginBottom: 12 }}>
-        {title}
-      </Text>
-      <ScrollView style={{ maxHeight: '100%', width: '100%' }}>
-        {items.map((item, idx) => (
-          <ListItem
-            key={idx}
-            onPress={() => {
-              if (onPress) {
-                onPress(item);
-              }
-            }}
-            bottomDivider={items.length - 1 != idx}
-          >
-            <ListItem.Content>
-              <ListItem.Title>
-                {item.title ? item.title : `Chapter ${idx + 1}`}
-              </ListItem.Title>
-            </ListItem.Content>
-            <ListItem.Chevron />
-          </ListItem>
-        ))}
+    <View style={styles.container}>
+      <Text style={styles.title}>{title}</Text>
+      <ScrollView style={styles.list}>
+        {items.map((item, idx) => {
+          const itemKey = item.href ? `${item.href}-${idx}` : `${idx}`;
+          return (
+            <ListItem
+              key={itemKey}
+              onPress={() => handlePress(item)}
+              bottomDivider={items.length - 1 !== idx}
+            >
+              <ListItem.Content>
+                <ListItem.Title>
+                  {item.title ? item.title : `Chapter ${idx + 1}`}
+                </ListItem.Title>
+              </ListItem.Content>
+              <ListItem.Chevron />
+            </ListItem>
+          );
+        })}
       </ScrollView>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  title: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  list: {
+    maxHeight: '100%',
+    width: '100%',
+  },
+});

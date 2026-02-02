@@ -5,16 +5,24 @@ import Slider from '@react-native-community/slider';
 import type { ReadiumProps } from '@tyukesz/react-native-readium';
 import { RANGES } from '@tyukesz/react-native-readium';
 
-interface Props {
+interface PreferencesEditorProps {
   preferences: ReadiumProps['preferences'];
   onChange: (preferences: ReadiumProps['preferences']) => void;
 }
 
 type Theme = NonNullable<ReadiumProps['preferences']['theme']>;
 
-export const PreferencesEditor = ({ preferences, onChange }: Props) => {
+const overlayStyle = {
+  width: '90%',
+  marginVertical: 100,
+} as const;
+
+export const PreferencesEditor: React.FC<PreferencesEditorProps> = ({
+  preferences,
+  onChange,
+}) => {
   const [isOpen, setIsOpen] = useState<boolean>(false);
-  const onToggleOpen = () => setIsOpen(!isOpen);
+  const onToggleOpen = useCallback(() => setIsOpen((prev) => !prev), []);
   const nextAppearance = useCallback((theme?: Theme) => {
     if (theme === 'light') {
       return 'dark';
@@ -31,10 +39,7 @@ export const PreferencesEditor = ({ preferences, onChange }: Props) => {
       <Overlay
         isVisible={isOpen}
         onBackdropPress={onToggleOpen}
-        overlayStyle={{
-          width: '90%',
-          marginVertical: 100,
-        }}
+        overlayStyle={overlayStyle}
       >
         <ScrollView>
           <Text>Preferences</Text>

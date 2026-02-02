@@ -26,16 +26,18 @@ import org.readium.r2.navigator.Navigator
 import org.readium.r2.navigator.epub.EpubPreferences
 import org.readium.r2.navigator.epub.EpubPreferencesSerializer
 import org.readium.r2.navigator.epub.EpubNavigatorFactory
-import org.readium.r2.shared.publication.Link
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.Publication
 import org.readium.r2.shared.publication.services.content.Content
 import org.readium.r2.shared.publication.services.content.ContentService
-import java.text.BreakIterator
-import java.util.Locale
 import kotlin.math.ceil
 
 class EpubReaderFragment : VisualReaderFragment() {
+
+    private val viewportTextExtractor = ViewportTextExtractor()
+
+    private val positionResolver: PublicationPositionResolver
+      get() = PublicationPositionResolver(publicationPositions, ::normalizedHrefForComparison)
 
     override lateinit var model: ReaderViewModel
     override lateinit var navigator: Navigator
@@ -49,7 +51,7 @@ class EpubReaderFragment : VisualReaderFragment() {
     private var initialHighlightSentenceJsonString: String? = null
 
     private lateinit var userPreferences: EpubPreferences
-    private val sentenceIndexCache = SentenceIndexCache()
+    private lateinit var sentenceIndexProvider: SentenceIndexProvider
     private var latestSentenceRequestId: String? = null
 
     // Accessibility
@@ -90,7 +92,9 @@ class EpubReaderFragment : VisualReaderFragment() {
 
     fun updatePreferencesFromJsonString(serialisedPreferences: String) {
       userPreferences = preferencesSerializer.deserialize(serialisedPreferences)
-      sentenceIndexCache.clear()
+      if (this::sentenceIndexProvider.isInitialized) {
+        sentenceIndexProvider.clearCache()
+      }
 
       if (this::navigator.isInitialized && navigator is EpubNavigatorFragment) {
         (navigator as EpubNavigatorFragment).submitPreferences(userPreferences)
@@ -171,9 +175,6 @@ class EpubReaderFragment : VisualReaderFragment() {
         val result = buildDecorationsFromSentenceIndex(highlightSentenceJson)
         if (requestId.isNullOrBlank() || latestSentenceRequestId == requestId) {
           decorable.applyDecorations(result.decorations, HIGHLIGHT_GROUP)
-          result.focusLocator?.let { locator ->
-            go(LinkOrLocator.Locator(locator), true)
-          }
         }
       }
     }
@@ -183,7 +184,7 @@ class EpubReaderFragment : VisualReaderFragment() {
       val href = json.optString("href")
       if (href.isBlank()) return emptyList()
 
-      val highlightStyle = parseHighlightStyle(json)
+      val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
 
       val start = json.optDouble("startProgression", Double.NaN)
       val end = json.optDouble("endProgression", Double.NaN)
@@ -334,292 +335,171 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
     }
 
-    data class SegmentInfo(
-      val locator: Locator,
-      val text: String,
-      val progression: Double?,
-      val blockBreakBefore: Boolean = false,
-    )
 
-    data class SentenceSpan(
-      val start: Int,
-      val end: Int,
-      val text: String,
-    )
-
-    data class SegmentOffset(
-      val locator: Locator,
-      val text: String,
-      val start: Int,
-      val end: Int,
-      val progression: Double?,
-    )
-
-    data class SentenceEntry(
-      val index: Int,
-      val start: Int,
-      val end: Int,
-      val text: String,
-      val progression: Double?,
-    )
-
-    data class SentenceIndex(
-      val href: String,
-      val totalChars: Int,
-      val segments: List<SegmentOffset>,
-      val sentences: List<SentenceEntry>,
-      var lastAccessTime: Long,
-    )
-
-    private class SentenceIndexCache {
-      private val map = LinkedHashMap<String, SentenceIndex>()
-      private val maxEntries = 4
-
-      fun get(href: String): SentenceIndex? = map[href]?.also {
-        it.lastAccessTime = System.currentTimeMillis()
-      }
-
-      fun put(href: String, index: SentenceIndex) {
-        map[href] = index
-        if (map.size > maxEntries) {
-          // Evict least recently accessed
-          val oldest = map.entries.minByOrNull { it.value.lastAccessTime }?.key
-          if (oldest != null) map.remove(oldest)
-        }
-      }
-
-      fun clear() {
-        map.clear()
-      }
+    private fun normalizedHrefForComparison(value: String): String {
+      return value.trim().removePrefix("/").substringBefore('#').substringBefore('?')
     }
 
-    private suspend fun collectSegmentsForHref(href: String): List<SegmentInfo> {
-      val hrefStartLocator = Locator.fromJSON(
-        JSONObject().apply {
-          put("href", href)
-          put("type", "application/xhtml+xml")
-          put(
-            "locations",
-            JSONObject().apply {
-              put("progression", 0.0)
-            }
-          )
-        }
-      ) ?: return emptyList()
 
-      val contentService = publication.findService(ContentService::class)
-        ?: return emptyList()
+    fun getVisibleTextRangeAsync(
+      includeText: Boolean,
+      maxTextLength: Int?,
+      source: String?,
+      onSuccess: (com.facebook.react.bridge.WritableMap) -> Unit,
+      onError: (Throwable) -> Unit,
+    ) {
+      if (!this::navigator.isInitialized) {
+        onError(IllegalStateException("Reader not ready"))
+        return
+      }
 
-      fun normalizeHref(value: String): String = value.trim().removePrefix("/")
-      val targetHref = normalizeHref(href)
+      viewLifecycleOwner.lifecycleScope.launch {
+        try {
+          val current = navigator.currentLocator.value
+          val currentHref = current.href.toString()
+          val hrefKey = normalizedHrefForComparison(currentHref)
+          val position = current.locations.position
 
-      return withContext(Dispatchers.IO) {
-        val content = contentService.content(hrefStartLocator)
-        val iterator = content.iterator()
-        val segments = mutableListOf<SegmentInfo>()
+          // Prefer page boundaries derived from the publication position number.
+          // This avoids cases where Readium's current locator progression and position can drift,
+          // causing consecutive positions (e.g. 24/25) to collapse into the same progression bucket.
+          val rangeFromPosition = positionResolver.pageRangeFromPosition(hrefKey, position)
 
-        var shouldInsertBlockBreak = false
+          val pRaw = current.locations.progression
+            ?: positionResolver.resolveProgressionFromPosition(hrefKey, position)
+            ?: 0.0
+          val p = pRaw.coerceIn(0.0, 1.0)
 
-        var seenTargetHref = false
-        while (true) {
-          val next = iterator.nextOrNull() ?: break
-          val textEl = next as? Content.TextElement ?: continue
-
-          val elHref = normalizeHref(textEl.locator.href.toString())
-          if (!seenTargetHref) {
-            if (elHref != targetHref) continue
-            seenTargetHref = true
-          } else if (elHref != targetHref) {
-            break
+          val (pageStart, pageEnd) = rangeFromPosition ?: run {
+            val boundaries = positionResolver.progressionsForHref(hrefKey)
+            val boundaryIndex = if (boundaries.isEmpty()) 0 else positionResolver.boundaryIndexForProgression(hrefKey, p)
+            val s = if (boundaries.isEmpty()) 0.0 else boundaries.getOrNull(boundaryIndex) ?: 0.0
+            val e = if (boundaries.isEmpty()) 1.0 else boundaries.getOrNull(boundaryIndex + 1) ?: 1.0
+            s to e
           }
+          val EPS = 1e-9
 
-          for ((segIndex, segment) in textEl.segments.withIndex()) {
-            val text = segment.text
-            if (text.isBlank()) continue
-            segments.add(
-              SegmentInfo(
-                locator = segment.locator,
-                text = text,
-                progression = segment.locator.locations.progression,
-                // Insert a paragraph break between Content.TextElement blocks.
-                // This helps sentence tokenization treat headings as separate sentences.
-                blockBreakBefore = shouldInsertBlockBreak && segIndex == 0
-              )
+          if (source == "viewport") {
+            val viewportPayload = getViewportTextRangePayload(
+              includeText = includeText,
+              maxTextLength = maxTextLength,
+              hrefKey = hrefKey,
+              pageStart = pageStart,
+              pageEnd = pageEnd,
+              position = position
             )
+
+            if (viewportPayload != null) {
+              onSuccess(viewportPayload)
+              return@launch
+            }
           }
 
-          // Next TextElement should start a new block.
-          shouldInsertBlockBreak = true
-        }
+          val index = sentenceIndexProvider.getIndex(hrefKey)
+          val totalChars = index.totalChars
 
-        segments
-      }
-    }
+          // Prefer sentence-based range (stable), fallback to segment-based.
+          val inPageSentences = index.sentences
+            .filter { it.progression != null }
+            .filter { (it.progression ?: 0.0) >= pageStart - EPS && (it.progression ?: 0.0) < pageEnd - EPS }
+            .sortedBy { it.start }
 
-    private fun buildCombinedText(segments: List<SegmentInfo>): String {
-      if (segments.isEmpty()) return ""
-      val sb = StringBuilder()
-      for (i in segments.indices) {
-        val seg = segments[i]
-        if (i != 0) {
-          if (seg.blockBreakBefore) {
-            sb.append("\n\n")
+          val rangeFromSentences = if (inPageSentences.isNotEmpty()) {
+            val s = inPageSentences.first().start
+            val e = inPageSentences.maxOf { it.end }
+            s to e
           } else {
-            sb.append(' ')
+            null
           }
-        }
-        sb.append(seg.text)
-      }
-      return sb.toString()
-    }
 
-    private fun buildSegmentOffsets(segments: List<SegmentInfo>): List<SegmentOffset> {
-      val offsets = mutableListOf<SegmentOffset>()
-      var cursor = 0
-      for (i in segments.indices) {
-        val seg = segments[i]
-        if (i != 0) {
-          cursor += if (seg.blockBreakBefore) 2 else 1
-        }
-        val start = cursor
-        val end = start + seg.text.length
-        offsets.add(
-          SegmentOffset(
-            locator = seg.locator,
-            text = seg.text,
-            start = start,
-            end = end,
-            progression = seg.progression
-          )
-        )
-        cursor = end
-      }
-      return offsets
-    }
-
-    private fun findTocTitleForHref(href: String): String? {
-      fun normalize(value: String): String = value.trim().removePrefix("/").substringBefore('#')
-      val target = normalize(href)
-
-      fun walk(links: List<Link>): String? {
-        for (link in links) {
-          val linkHref = normalize(link.href.toString())
-          if (linkHref == target) {
-            val title = link.title?.trim()
-            if (!title.isNullOrBlank()) return title
+          val rangeFromSegments = run {
+            val segs = index.segments
+              .filter { it.progression != null }
+              .filter { (it.progression ?: 0.0) >= pageStart - EPS && (it.progression ?: 0.0) < pageEnd - EPS }
+            if (segs.isEmpty()) null else (segs.minOf { it.start } to segs.maxOf { it.end })
           }
-          val child = link.children?.let { walk(it) }
-          if (child != null) return child
+
+          val (startRaw, endRaw) = when {
+            rangeFromSegments != null && rangeFromSentences != null -> {
+              val s = kotlin.math.max(rangeFromSegments.first, rangeFromSentences.first)
+              val e = kotlin.math.min(rangeFromSegments.second, rangeFromSentences.second)
+              if (e > s) s to e else rangeFromSegments
+            }
+            rangeFromSegments != null -> rangeFromSegments
+            rangeFromSentences != null -> rangeFromSentences
+            else -> (0 to totalChars)
+          }
+          val start = startRaw.coerceIn(0, totalChars)
+          val end = endRaw.coerceIn(start, totalChars)
+
+          val payload = com.facebook.react.bridge.Arguments.createMap().apply {
+            putString("href", hrefKey)
+            putInt("start", start)
+            putInt("end", end)
+            putInt("totalChars", totalChars)
+            putDouble("pageStartProgression", pageStart)
+            putDouble("pageEndProgression", pageEnd)
+            putString("rangeSource", "approx")
+            if (position != null) putInt("position", position)
+
+            if (includeText) {
+              val available = end - start
+              val limit = maxTextLength?.takeIf { it > 0 } ?: available
+              val take = minOf(available, limit)
+              val text = if (take <= 0) "" else index.combinedText.substring(start, start + take)
+              putString("text", text)
+              putBoolean("isTruncated", take < available)
+            }
+          }
+
+          onSuccess(payload)
+        } catch (e: Throwable) {
+          onError(e)
         }
-        return null
       }
-
-      return walk(publication.tableOfContents)
     }
 
-    private fun sentenceLocale(): Locale {
-      val tag = publication.metadata.languages.firstOrNull()?.toString()?.trim().orEmpty()
-      return if (tag.isNotBlank()) Locale.forLanguageTag(tag) else Locale.getDefault()
-    }
+    private suspend fun getViewportTextRangePayload(
+      includeText: Boolean,
+      maxTextLength: Int?,
+      hrefKey: String,
+      pageStart: Double,
+      pageEnd: Double,
+      position: Int?,
+    ): com.facebook.react.bridge.WritableMap? {
+      val root = navigatorFragment.view ?: return null
+      val viewport = viewportTextExtractor.extract(root) ?: return null
 
-    private fun splitLeadingTitleIfMerged(
-      combined: String,
-      spans: List<SentenceSpan>,
-      title: String?
-    ): List<SentenceSpan> {
-      val t = title?.trim()?.takeIf { it.isNotBlank() } ?: return spans
-      if (spans.isEmpty()) {
-        return listOf(SentenceSpan(start = 0, end = t.length, text = t))
-      }
+      val totalChars = viewport.totalChars
+      val start = viewport.start
+      val end = viewport.end
 
-      val first = spans.first()
-      if (first.text == t) return spans
-      if (!first.text.startsWith(t)) return spans
+      val payload = com.facebook.react.bridge.Arguments.createMap().apply {
+        putString("href", hrefKey)
+        putInt("start", start)
+        putInt("end", end)
+        putInt("totalChars", totalChars)
+        putDouble("pageStartProgression", pageStart)
+        putDouble("pageEndProgression", pageEnd)
+        putString("rangeSource", "viewport")
+        if (position != null) putInt("position", position)
 
-      // Split the first sentence span into [title] + [rest] so Android aligns with iOS.
-      val titleStart = first.start
-      val titleEnd = (titleStart + t.length).coerceAtMost(first.end)
-
-      var restStart = titleEnd
-      while (restStart < first.end && combined[restStart].isWhitespace()) restStart++
-      var restEnd = first.end
-      while (restEnd > restStart && combined[restEnd - 1].isWhitespace()) restEnd--
-
-      val out = mutableListOf<SentenceSpan>()
-      out.add(SentenceSpan(start = titleStart, end = titleEnd, text = t))
-      if (restEnd > restStart) {
-        out.add(
-          SentenceSpan(
-            start = restStart,
-            end = restEnd,
-            text = combined.substring(restStart, restEnd)
-          )
-        )
-      }
-
-      for (i in 1 until spans.size) out.add(spans[i])
-      return out
-    }
-
-    private fun splitSentencesWithSpans(text: String): List<SentenceSpan> {
-      if (text.isBlank()) return emptyList()
-
-      val spans = mutableListOf<SentenceSpan>()
-      val iterator = BreakIterator.getSentenceInstance(sentenceLocale())
-      iterator.setText(text)
-      var start = iterator.first()
-      var end = iterator.next()
-      while (end != BreakIterator.DONE) {
-        var s = start
-        var e = end
-        while (s < e && text[s].isWhitespace()) s++
-        while (e > s && text[e - 1].isWhitespace()) e--
-        if (e > s) {
-          val sentenceText = text.substring(s, e)
-          spans.add(SentenceSpan(start = s, end = e, text = sentenceText))
+        if (includeText) {
+          val fullText = viewport.text
+          val available = (end - start).coerceAtLeast(0)
+          val limit = maxTextLength?.takeIf { it > 0 } ?: available
+          val take = minOf(available, limit)
+          val text = if (take <= 0 || fullText.isEmpty()) "" else fullText.take(take)
+          putString("text", text)
+          putBoolean("isTruncated", take < available)
         }
-        start = end
-        end = iterator.next()
-      }
-      return spans
-    }
-
-    private suspend fun getOrBuildSentenceIndex(href: String): SentenceIndex {
-      sentenceIndexCache.get(href)?.let { return it }
-
-      val segments = collectSegmentsForHref(href)
-      val combined = buildCombinedText(segments)
-      val segmentOffsets = buildSegmentOffsets(segments)
-      val tocTitle = findTocTitleForHref(href)
-      val spans = splitLeadingTitleIfMerged(combined, splitSentencesWithSpans(combined), tocTitle)
-
-      val totalChars = combined.length
-      val sentences = spans.mapIndexed { idx, span ->
-        // Use a deterministic, monotonic progression derived from the sentence start offset.
-        // Segment locators progressions are often sparse or repeated, which makes mapping unstable.
-        val progression = if (totalChars > 0) span.start.toDouble() / totalChars.toDouble() else null
-        SentenceEntry(
-          index = idx,
-          start = span.start,
-          end = span.end,
-          text = span.text,
-          progression = progression
-        )
       }
 
-      val index = SentenceIndex(
-        href = href,
-        totalChars = totalChars,
-        segments = segmentOffsets,
-        sentences = sentences,
-        lastAccessTime = System.currentTimeMillis(),
-      )
-      sentenceIndexCache.put(href, index)
-      return index
+      return payload
     }
 
     private suspend fun computeChapterSentences(href: String): List<String> {
-      val index = getOrBuildSentenceIndex(href)
+      val index = sentenceIndexProvider.getIndex(href)
       return index.sentences.map { it.text }
     }
 
@@ -634,12 +514,12 @@ class EpubReaderFragment : VisualReaderFragment() {
       val href = json.optString("href")
       if (href.isBlank()) return SentenceDecorationResult(emptyList(), null)
 
-      val highlightStyle = parseHighlightStyle(json)
+      val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
 
       val sentenceIndex = json.optInt("sentenceIndex", Int.MIN_VALUE)
       if (sentenceIndex == Int.MIN_VALUE || sentenceIndex < 0) return SentenceDecorationResult(emptyList(), null)
 
-      val sentenceIndexData = getOrBuildSentenceIndex(href)
+      val sentenceIndexData = sentenceIndexProvider.getIndex(href)
       if (sentenceIndex >= sentenceIndexData.sentences.size) return SentenceDecorationResult(emptyList(), null)
 
       val target = sentenceIndexData.sentences[sentenceIndex]
@@ -647,21 +527,12 @@ class EpubReaderFragment : VisualReaderFragment() {
       val endChar = target.end.toLong()
       if (endChar <= startChar) return SentenceDecorationResult(emptyList(), null)
 
-      // Navigation: use a synthetic Locator with a progression when possible.
-      // Readium's decoration locators often rely on TextQuoteAnchor (locator.text.*), which
-      // does not reliably change the Locator hash (and therefore BaseReaderFragment.go() may
-      // skip navigation thinking we're "already there").
-      val focusProgression = run {
-        val p = target.progression
-          ?: if (sentenceIndexData.totalChars > 0) {
-            (target.start.toDouble() / sentenceIndexData.totalChars.toDouble())
-          } else {
-            null
-          }
-        p?.coerceIn(0.0, 1.0)
-      }
+      // Navigation focus: use a synthetic Locator with a progression when possible.
+      // We use the sentence's computed progression (which is page-aware), so JS can navigate
+      // to the containing page deterministically.
+      val focusProgression = target.progression?.coerceIn(0.0, 1.0)
 
-      val focusLocator: Locator? = focusProgression?.let { p ->
+      val focusLocator: Locator? = focusProgression?.let { pVal ->
         Locator.fromJSON(
           JSONObject().apply {
             put("href", href)
@@ -669,7 +540,7 @@ class EpubReaderFragment : VisualReaderFragment() {
             put(
               "locations",
               JSONObject().apply {
-                put("progression", p)
+                put("progression", pVal)
               }
             )
           }
@@ -735,7 +606,7 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
       viewLifecycleOwner.lifecycleScope.launch {
         try {
-          val index = getOrBuildSentenceIndex(href)
+          val index = sentenceIndexProvider.getIndex(href)
           val total = index.sentences.size
           val safeOffset = offset.coerceIn(0, total)
           val safeLimit = limit.coerceAtLeast(0)
@@ -763,43 +634,47 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
       viewLifecycleOwner.lifecycleScope.launch {
         try {
-          val index = getOrBuildSentenceIndex(href)
+          val index = sentenceIndexProvider.getIndex(href)
           val p = progression.coerceIn(0.0, 1.0)
-          // Map to character offset, then locate the sentence containing it.
-          val totalChars = index.totalChars
-          if (totalChars <= 0) {
-            onSuccess(0)
-            return@launch
-          }
-          val targetChar = (p * totalChars.toDouble()).toInt().coerceIn(0, totalChars)
-
           val sentences = index.sentences
           if (sentences.isEmpty()) {
             onSuccess(0)
             return@launch
           }
 
-          var lo = 0
-          var hi = sentences.lastIndex
-          var found: SentenceEntry? = null
+          val positions = positionResolver.progressionsForHref(href)
+          val boundaryIndex = if (positions.isEmpty()) 0 else positionResolver.boundaryIndexForProgression(href, p)
+          val pageStart = if (positions.isEmpty()) 0.0 else positions.getOrNull(boundaryIndex) ?: 0.0
+          val pageEnd = if (positions.isEmpty()) 1.0 else positions.getOrNull(boundaryIndex + 1) ?: 1.0
+          val EPS = 1e-9
 
-          while (lo <= hi) {
-            val mid = (lo + hi) ushr 1
-            val s = sentences[mid]
-            when {
-              targetChar < s.start -> hi = mid - 1
-              targetChar >= s.end -> lo = mid + 1
-              else -> {
-                found = s
-                break
-              }
-            }
+          val inPage = sentences
+            .filter { it.pageStartProgression != null }
+            .filter { (it.pageStartProgression ?: 0.0) >= pageStart - EPS && (it.pageStartProgression ?: 0.0) <= pageStart + EPS }
+            .sortedBy { it.progression }
+
+          if (inPage.isEmpty()) {
+            onSuccess(sentences.first().index)
+            return@launch
           }
 
-          val resolvedIndex = found?.index
-            ?: sentences.getOrNull(hi)?.index
-            ?: sentences.first().index
-          onSuccess(resolvedIndex)
+          // Exact page boundary => first sentence on that page.
+          if (p <= pageStart + EPS) {
+            onSuccess(inPage.first().index)
+            return@launch
+          }
+
+          // Otherwise, floor within the page.
+          var resolved = inPage.first().index
+          for (s in inPage) {
+            val sp = s.progression ?: continue
+            if (sp <= p + EPS && sp < pageEnd + EPS) {
+              resolved = s.index
+            } else {
+              break
+            }
+          }
+          onSuccess(resolved)
         } catch (e: Throwable) {
           onError(e)
         }
@@ -815,6 +690,8 @@ class EpubReaderFragment : VisualReaderFragment() {
             model = it
             publication = it.publication
           }
+
+          sentenceIndexProvider = SentenceIndexProvider(publication, { positionResolver })
 
           ensureUserPreferencesInitialized()
 
@@ -877,49 +754,6 @@ class EpubReaderFragment : VisualReaderFragment() {
       private const val HIGHLIGHT_GROUP = "range"
       private const val HIGHLIGHT_ID_PREFIX = "active-"
       private const val TEXT_QUOTE_CONTEXT_CHARS = 32
-
-      private const val DEFAULT_HIGHLIGHT_TINT = 0x59FFFF00.toInt() // ~35% alpha yellow
-      private const val DEFAULT_HIGHLIGHT_IS_ACTIVE = false
-
-      private data class HighlightStyleConfig(
-        val tint: Int,
-        val isActive: Boolean,
-      )
-
-      private fun parseTintValue(value: Any?): Int? {
-        return when (value) {
-          is String -> {
-            var s = value.trim()
-            if (s.startsWith("#")) s = s.substring(1)
-            if (s.startsWith("0x") || s.startsWith("0X")) s = s.substring(2)
-            if (s.length != 6 && s.length != 8) return null
-            val raw = s.toLongOrNull(16) ?: return null
-            val argb = if (s.length == 6) {
-              0xFF000000L or raw
-            } else {
-              raw and 0xFFFFFFFFL
-            }
-            argb.toInt()
-          }
-
-          else -> null
-        }
-      }
-
-      private fun parseHighlightStyle(json: JSONObject): HighlightStyleConfig {
-        val style = json.optJSONObject("style")
-        val tint = if (style != null && style.has("tint")) {
-          parseTintValue(style.opt("tint")) ?: DEFAULT_HIGHLIGHT_TINT
-        } else {
-          DEFAULT_HIGHLIGHT_TINT
-        }
-        val isActive = if (style != null && style.has("isActive")) {
-          style.optBoolean("isActive")
-        } else {
-          DEFAULT_HIGHLIGHT_IS_ACTIVE
-        }
-        return HighlightStyleConfig(tint = tint, isActive = isActive)
-      }
 
         fun newInstance(): EpubReaderFragment {
             return EpubReaderFragment()

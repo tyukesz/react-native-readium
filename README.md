@@ -250,6 +250,8 @@ import {
   highlightRange,
   highlightSentence,
   highlightSentenceFromProgression,
+  navigateTo,
+  navigateToProgression,
   getChapterSentencePage,
   getChapterSentences,
   getSentenceIndexFromProgression,
@@ -260,6 +262,7 @@ import {
 - Notes:
   - The JS API prefers a single named-arguments object for calls that have multiple parameters. Example: `highlightSentence(ref, { href, sentenceIndex, style })`.
   - Style-aware native methods are optional on older native installs. When a `style` is provided and the native side supports it, the library will call the style-aware native entrypoint automatically. If not available, the call falls back to the default platform highlight style and a warning is logged.
+  - Highlighting no longer navigates the reader. Call `navigateTo(...)` / `navigateToProgression(...)` explicitly if you want to jump.
 
 - `HighlightStyle` (optional):
   - `tint?: string` — Hex color string: `"#RRGGBB"`, `"#AARRGGBB"`, or `"0xAARRGGBB"`.
@@ -285,6 +288,16 @@ highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endPr
 
 // Highlight sentence nearest to progression and get its index
 const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
+
+// Navigate explicitly (e.g. after a highlight, or for Table of Contents)
+await navigateToProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42 })
+
+// Note: On publications with discrete positions/pages, navigateToProgression will navigate to the
+// page that CONTAINS the requested progression (floor), rather than snapping to the nearest page.
+// It does this using the publication positions received via onPublicationReady (handled internally).
+
+// Or navigate to a Link/Locator object
+await navigateTo(ref, { href: 'text/chapter-1.xhtml', type: 'application/xhtml+xml', locations: { progression: 0 } })
 
 // Page sentences (total + items)
 const page = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 50 })

@@ -9,7 +9,9 @@ import com.facebook.react.uimanager.ViewManager
 class ReadiumPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
-            HighlightModule(reactContext)
+            HighlightModule(reactContext),
+            NavigationModule(reactContext),
+            TextModule(reactContext)
         )
     }
 

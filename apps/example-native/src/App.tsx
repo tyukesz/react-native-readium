@@ -1,17 +1,40 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
-import { Reader, RNFS } from 'common-app';
+import { Reader } from 'common-app';
 import type { Link, Locator } from '@tyukesz/react-native-readium';
 
 import { TableOfContentsScreen } from './TableOfContentsScreen';
+import { EPUB_URL, getEpubPath, INITIAL_LOCATION } from './readerConfig';
 
-const Stack = createNativeStackNavigator();
+type RootStackParamList = {
+  Reader: undefined;
+  TableOfContents: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
   const [toc, setToc] = useState<Link[]>([]);
   const [externalLocation, setExternalLocation] = useState<Locator | Link>();
+
+  const epubPath = useMemo(() => getEpubPath(), []);
+  const handleOpenToc = useCallback(
+    (navigation: { navigate: (screen: keyof RootStackParamList) => void }) =>
+      navigation.navigate('TableOfContents'),
+    []
+  );
+  const handleSelectToc = useCallback(
+    (
+      navigation: { goBack: () => void },
+      location: Locator | Link
+    ) => {
+      setExternalLocation(location);
+      navigation.goBack();
+    },
+    []
+  );
 
   return (
     <NavigationContainer>
@@ -19,22 +42,12 @@ export default function App() {
         <Stack.Screen name="Reader">
           {({ navigation }) => (
             <Reader
-              epubUrl="https://test.opds.io/assets/moby/file.epub"
-              epubPath={`${RNFS.DocumentDirectoryPath}/moby-dick.epub`}
-              initialLocation={{
-                href: '/OPS/main3.xml',
-                title: 'Chapter 2 - The Carpet-Bag',
-                type: 'application/xhtml+xml',
-                target: 27,
-                locations: {
-                  position: 24,
-                  progression: 0,
-                  totalProgression: 0.03392330383480826,
-                },
-              }}
+              epubUrl={EPUB_URL}
+              epubPath={epubPath}
+              initialLocation={INITIAL_LOCATION}
               externalLocation={externalLocation}
               onTocChange={setToc}
-              onOpenToc={() => navigation.navigate('TableOfContents')}
+              onOpenToc={() => handleOpenToc(navigation)}
             />
           )}
         </Stack.Screen>
@@ -42,10 +55,7 @@ export default function App() {
           {({ navigation }) => (
             <TableOfContentsScreen
               items={toc}
-              onSelect={(loc) => {
-                setExternalLocation(loc);
-                navigation.goBack();
-              }}
+              onSelect={(loc) => handleSelectToc(navigation, loc)}
             />
           )}
         </Stack.Screen>
