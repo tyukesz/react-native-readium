@@ -172,7 +172,19 @@ class ReadiumView : UIView, Loggable {
       pageEnd = boundaries.isEmpty ? 1.0 : (boundaries[safe: bIdx + 1] ?? 1.0)
     }
 
-    if source == "viewport", let viewport = await viewportTextExtractor.extract(from: readerViewController?.view ?? self) {
+    func sanitizeVisibleTextForJs(_ text: String) -> String {
+      if text.isEmpty { return text }
+      // Keep character counts stable while removing disruptive whitespace characters.
+      return text
+        .replacingOccurrences(of: "\r", with: " ")
+        .replacingOccurrences(of: "\n", with: " ")
+        .replacingOccurrences(of: "\t", with: " ")
+    }
+
+    let sourceNorm = source?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    if sourceNorm == "viewport" {
+      let viewport = await viewportTextExtractor.extract(from: readerViewController?.view ?? self)
+      if let viewport = viewport {
       let totalChars = viewport.totalChars
       let start = viewport.start
       let end = viewport.end
@@ -182,13 +194,11 @@ class ReadiumView : UIView, Loggable {
         "start": start,
         "end": end,
         "totalChars": totalChars,
-        "pageStartProgression": pageStart,
-        "pageEndProgression": pageEnd,
         "rangeSource": "viewport"
       ]
 
       if includeText {
-        let fullText = viewport.text
+        let fullText = sanitizeVisibleTextForJs(viewport.text)
         let available = max(0, end - start)
         let maxLen = (maxTextLength ?? Int.max)
         let take = max(0, min(available, maxLen))
@@ -197,11 +207,15 @@ class ReadiumView : UIView, Loggable {
         payload["isTruncated"] = take < available
       }
 
-      if let pos = current.locations.position {
-        payload["position"] = pos
+        if let pos = current.locations.position {
+          payload["position"] = pos
+        }
+
+        return payload
       }
 
-      return payload
+      // Explicitly requested viewport extraction but it failed — surface an error
+      throw NSError(domain: "readium", code: 3, userInfo: [NSLocalizedDescriptionKey: "viewport extraction failed"])
     }
 
     let sentences = await getSentencesForHref(hrefKey)
@@ -236,8 +250,6 @@ class ReadiumView : UIView, Loggable {
       "start": start,
       "end": end,
       "totalChars": totalChars,
-      "pageStartProgression": pageStart,
-      "pageEndProgression": pageEnd,
       "rangeSource": "approx",
     ]
 
@@ -247,10 +259,10 @@ class ReadiumView : UIView, Loggable {
       let text = inPage.map { $0.text }.joined()
       if take < text.count {
         let i = text.index(text.startIndex, offsetBy: take)
-        payload["text"] = String(text[..<i])
+        payload["text"] = sanitizeVisibleTextForJs(String(text[..<i]))
         payload["isTruncated"] = true
       } else {
-        payload["text"] = text
+        payload["text"] = sanitizeVisibleTextForJs(text)
         payload["isTruncated"] = false
       }
     }

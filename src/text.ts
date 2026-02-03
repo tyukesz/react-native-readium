@@ -9,6 +9,8 @@ export type VisibleTextRange = {
   text?: string;
   isTruncated?: boolean;
   rangeSource?: 'approx' | 'viewport';
+  /** Publication position number (when available on native). */
+  position?: number;
 };
 
 export type GetVisibleTextRangeOptions = {
@@ -17,6 +19,7 @@ export type GetVisibleTextRangeOptions = {
   /**
    * "approx" uses sentence/segment indices; "viewport" queries the rendered WebView DOM.
    * When "viewport", start/end/totalChars are based on DOM text order.
+   * Returned `text` is JS-friendly: `\r`, `\n`, and `\t` are replaced with spaces.
    */
   source?: 'approx' | 'viewport';
 };

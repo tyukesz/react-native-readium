@@ -143,7 +143,7 @@ class SentenceIndexProvider(
         }
 
         for ((segIndex, segment) in textEl.segments.withIndex()) {
-          val text = segment.text
+          val text = segment.text.trim()
           if (text.isBlank()) continue
           segments.add(
             SegmentInfo(

@@ -384,8 +384,6 @@ class EpubReaderFragment : VisualReaderFragment() {
               includeText = includeText,
               maxTextLength = maxTextLength,
               hrefKey = hrefKey,
-              pageStart = pageStart,
-              pageEnd = pageEnd,
               position = position
             )
 
@@ -437,8 +435,6 @@ class EpubReaderFragment : VisualReaderFragment() {
             putInt("start", start)
             putInt("end", end)
             putInt("totalChars", totalChars)
-            putDouble("pageStartProgression", pageStart)
-            putDouble("pageEndProgression", pageEnd)
             putString("rangeSource", "approx")
             if (position != null) putInt("position", position)
 
@@ -446,8 +442,8 @@ class EpubReaderFragment : VisualReaderFragment() {
               val available = end - start
               val limit = maxTextLength?.takeIf { it > 0 } ?: available
               val take = minOf(available, limit)
-              val text = if (take <= 0) "" else index.combinedText.substring(start, start + take)
-              putString("text", text)
+              val textRaw = if (take <= 0) "" else index.combinedText.substring(start, start + take)
+              putString("text", sanitizeVisibleTextForJs(textRaw))
               putBoolean("isTruncated", take < available)
             }
           }
@@ -463,8 +459,6 @@ class EpubReaderFragment : VisualReaderFragment() {
       includeText: Boolean,
       maxTextLength: Int?,
       hrefKey: String,
-      pageStart: Double,
-      pageEnd: Double,
       position: Int?,
     ): com.facebook.react.bridge.WritableMap? {
       val root = navigatorFragment.view ?: return null
@@ -479,13 +473,11 @@ class EpubReaderFragment : VisualReaderFragment() {
         putInt("start", start)
         putInt("end", end)
         putInt("totalChars", totalChars)
-        putDouble("pageStartProgression", pageStart)
-        putDouble("pageEndProgression", pageEnd)
         putString("rangeSource", "viewport")
         if (position != null) putInt("position", position)
 
         if (includeText) {
-          val fullText = viewport.text
+          val fullText = sanitizeVisibleTextForJs(viewport.text)
           val available = (end - start).coerceAtLeast(0)
           val limit = maxTextLength?.takeIf { it > 0 } ?: available
           val take = minOf(available, limit)
@@ -496,6 +488,15 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
 
       return payload
+    }
+
+    private fun sanitizeVisibleTextForJs(text: String): String {
+      if (text.isEmpty()) return text
+      // Keep character counts stable while removing disruptive whitespace characters.
+      return text
+        .replace("\r", " ")
+        .replace("\n", " ")
+        .replace("\t", " ")
     }
 
     private suspend fun computeChapterSentences(href: String): List<String> {

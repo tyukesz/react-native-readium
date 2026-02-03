@@ -137,6 +137,9 @@ export const Reader: React.FC<ReaderProps> = ({
   };
 
   const loadSentencesCount = useCallback(async () => {
+    // const progression = 0.2583060247038064;
+    // const href = 'OPS/main3.xml';
+    // await navigateToProgression(ref, { href, progression });
     const href = highlightHref.trim();
     if (!href) return;
     if (!isNative) {
@@ -211,18 +214,6 @@ export const Reader: React.FC<ReaderProps> = ({
     setSentencePreview(null);
   }, [highlightHref, isHighlightModalVisible]);
 
-  useEffect(() => {
-    if (!isHighlightModalVisible) return;
-    if (!highlightHref.trim()) return;
-
-    // Avoid hammering native while the user is typing.
-    const t = setTimeout(() => {
-      loadSentencesCount();
-    }, 250);
-
-    return () => clearTimeout(t);
-  }, [isHighlightModalVisible, highlightHref, loadSentencesCount]);
-
   if (file) {
     return (
       <View style={styles.container}>
@@ -262,7 +253,11 @@ export const Reader: React.FC<ReaderProps> = ({
               location={location}
               preferences={preferences}
               onLocationChange={(locator: Locator) => {
-                console.log('onLocationChange', locator);
+                console.log('onLocationChange', {
+                  href: locator.href,
+                  progression: locator.locations.progression,
+                  title: locator.title,
+                });
                 setLocation(locator);
               }}
               onPublicationReady={(event: PublicationReadyEvent) => {

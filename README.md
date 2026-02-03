@@ -313,6 +313,39 @@ const idx2 = await getSentenceIndexFromProgression(ref, { href: 'text/chapter-1.
 clearHighlight(ref)
 ```
 
+## Visible Text APIs
+
+The library also exposes a native-only helper for extracting the currently visible text range.
+
+- Import:
+
+```ts
+import { getVisibleTextRange, getVisibleCharacterRange } from '@tyukesz/react-native-readium'
+```
+
+- `getVisibleTextRange(viewRef, options?)` (native only)
+  - Returns a `Promise` resolving to:
+    - `href: string`
+    - `start: number`, `end: number`, `totalChars: number`
+    - `text?: string`, `isTruncated?: boolean`
+    - `rangeSource?: 'approx' | 'viewport'`
+    - `position?: number` (when available)
+  - Options:
+    - `includeText?: boolean` (default `true`)
+    - `maxTextLength?: number` (optional)
+    - `source?: 'approx' | 'viewport'`
+      - `viewport`: queries the rendered WebView DOM and returns the visible substring.
+      - `approx`: uses sentence/segment indices (fast, stable; may be less precise than `viewport`).
+
+- `getVisibleCharacterRange(viewRef)`
+  - Convenience wrapper that calls `getVisibleTextRange(..., { includeText: false })`.
+
+Notes:
+- The returned `text` is normalized to be JS-friendly: `\r`, `\n`, and `\t` are replaced with spaces.
+- For `source: 'viewport'`, global leading/trailing whitespace is trimmed from the document text before computing offsets.
+- If you call `getVisibleTextRange` immediately after a navigation/chapter change, the WebView may still be rendering.
+  For best results, call after your `onLocationChange` handler fires (or after a short delay).
+
 
 #### View Props
 
