@@ -1900,7 +1900,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-readium (4.0.1):
+  - react-native-readium (5.0.3):
     - React-Core
     - ReadiumAdapterGCDWebServer (~> 3.5.0)
     - ReadiumInternal
@@ -1994,7 +1994,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-slider (5.1.1):
+  - react-native-slider (5.1.2):
     - boost
     - DoubleConversion
     - fast_float
@@ -2012,7 +2012,7 @@ PODS:
     - React-graphics
     - React-ImageManager
     - React-jsi
-    - react-native-slider/common (= 5.1.1)
+    - react-native-slider/common (= 5.1.2)
     - React-NativeModulesApple
     - React-RCTFabric
     - React-renderercss
@@ -2023,7 +2023,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - react-native-slider/common (5.1.1):
+  - react-native-slider/common (5.1.2):
     - boost
     - DoubleConversion
     - fast_float
@@ -2636,7 +2636,7 @@ PODS:
   - ReadiumZIPFoundation (3.0.1)
   - RNFS (2.20.0):
     - React-Core
-  - RNScreens (4.19.0):
+  - RNScreens (4.20.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -2663,10 +2663,10 @@ PODS:
     - ReactCodegen
     - ReactCommon/turbomodule/bridging
     - ReactCommon/turbomodule/core
-    - RNScreens/common (= 4.19.0)
+    - RNScreens/common (= 4.20.0)
     - SocketRocket
     - Yoga
-  - RNScreens/common (4.19.0):
+  - RNScreens/common (4.20.0):
     - boost
     - DoubleConversion
     - fast_float
@@ -2990,7 +2990,7 @@ SPEC CHECKSUMS:
   FBLazyVector: 309703e71d3f2f1ed7dc7889d58309c9d77a95a4
   fmt: a40bb5bd0294ea969aaaba240a927bd33d878cdd
   glog: 5683914934d5b6e4240e497e0f4a3b42d1854183
-  hermes-engine: ab02976198487cb8aa46bf83e2810a086d37edc0
+  hermes-engine: 69f2da30d7ea178969ebaafccb9ab5fb70d7c8da
   Minizip: 188cb3e39a1195c283ae03bf673d182596fefd0b
   RCT-Folly: 59ec0ac1f2f39672a0c6e6cecdd39383b764646f
   RCTDeprecation: a41bbdd9af30bf2e5715796b313e44ec43eefff1
@@ -3028,9 +3028,9 @@ SPEC CHECKSUMS:
   React-logger: 6ac901f5c7f7321d2be1a40b203bccc2e23411e3
   React-Mapbuffer: 2e0e7cc5b7064eaed9c8b8afc3a87621cb7ef5cd
   React-microtasksnativemodule: dd4d33b251b57e5027c572c6d0b45cbfbcfaa386
-  react-native-readium: 2c1c2325e3176913b02d4650273ab4ebc4de639f
+  react-native-readium: 01c3b72ead9b555a21d3f0b579ea2eba9b31241e
   react-native-safe-area-context: 54d812805f3c4e08a4580ad086cbde1d8780c2e4
-  react-native-slider: e35799fb9983a19307195d77f10caf5f6a716842
+  react-native-slider: 5da4af460d0dd1346f927e829dfecbb81bd46f91
   React-NativeModulesApple: 7f2f2fed3f6c858889eb61d09941be965d52df58
   React-networking: 43e5e6773ac2ca2a93261a1388fed269c9fce092
   React-oscompat: 80166b66da22e7af7fad94474e9997bd52d4c8c6
@@ -3073,12 +3073,12 @@ SPEC CHECKSUMS:
   ReadiumStreamer: faad7d159973b801dc9d26b1bf9d21d9f88d66a3
   ReadiumZIPFoundation: 4009f635ebc718cc113a388ecb33c773f00639ca
   RNFS: 4ac0f0ea233904cb798630b3c077808c06931688
-  RNScreens: 69f68c95d395bc4261d27c3aae7b4a458b947b7e
+  RNScreens: b2a5c76af24a02a2fd71bfce42780fdd9c79cc6d
   RNVectorIcons: fcc2f6cb32f5735b586e66d14103a74ce6ad61f8
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   SwiftSoup: 9ec2526c76ebc3fe5d3157c82b40b45a27eeb82d
   Yoga: 5bd0956bf9cb16f75101e78b5e852c7577bc5a45
 
-PODFILE CHECKSUM: b933c37a2db9f5b328528708ea0f3a1544d8b3c1
+PODFILE CHECKSUM: 69e642c017ee0028a94fa22a5947101502bd315d
 
 COCOAPODS: 1.16.2

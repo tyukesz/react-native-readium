@@ -2,7 +2,7 @@
   "compilerOptions": {
     "baseUrl": "./",
     "paths": {
-      "react-native-readium": ["./src/index"]
+      "@tyukesz/react-native-readium": ["./src/index"]
     },
     "allowJs": false,
     "allowSyntheticDefaultImports": true,

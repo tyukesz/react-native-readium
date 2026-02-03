@@ -13,6 +13,19 @@ const config = {
   projectRoot: __dirname,
   watchFolders: [root],
 
+  resolver: {
+    // Ensure Metro can resolve hoisted workspace dependencies.
+    nodeModulesPaths: [
+      path.resolve(__dirname, 'node_modules'),
+      path.resolve(root, 'node_modules'),
+    ],
+    // Resolve the local workspace package by name.
+    extraNodeModules: {
+      '@tyukesz/react-native-readium': root,
+    },
+    disableHierarchicalLookup: true,
+  },
+
   transformer: {
     getTransformOptions: async () => ({
       transform: {

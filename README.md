@@ -1,6 +1,6 @@
-# react-native-readium
+# @tyukesz/react-native-readium
 
-[![NPM version](https://img.shields.io/npm/v/react-native-readium.svg?color=success&label=npm%20package&logo=npm)](https://www.npmjs.com/package/react-native-readium)
+[![NPM version](https://img.shields.io/npm/v/%40tyukesz%2Freact-native-readium.svg?color=success&label=npm%20package&logo=npm)](https://www.npmjs.com/package/@tyukesz/react-native-readium)
 [![Commitizen friendly](https://img.shields.io/badge/commitizen-friendly-brightgreen.svg)](http://commitizen.github.io/cz-cli/)
 ![PRs welcome!](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)
 ![This project is released under the MIT license](https://img.shields.io/badge/license-MIT-blue.svg)
@@ -60,13 +60,13 @@ allows you to do things like:
 **NPM**
 
 ```sh
-npm install react-native-readium
+npm install @tyukesz/react-native-readium
 ```
 
 **Yarn**
 
 ```sh
-yarn add react-native-readium
+yarn add @tyukesz/react-native-readium
 ```
 
 #### iOS
@@ -168,8 +168,8 @@ they persist across builds.
 
 ```tsx
 import React, { useState } from 'react';
-import { ReadiumView } from 'react-native-readium';
-import type { File } from 'react-native-readium';
+import { ReadiumView } from '@tyukesz/react-native-readium';
+import type { File } from '@tyukesz/react-native-readium';
 
 const MyComponent: React.FC = () => {
   const [file] = useState<File>({
@@ -190,8 +190,8 @@ Access the table of contents, positions, and metadata when the publication is re
 
 ```tsx
 import React, { useState } from 'react';
-import { ReadiumView } from 'react-native-readium';
-import type { File, PublicationReadyEvent } from 'react-native-readium';
+import { ReadiumView } from '@tyukesz/react-native-readium';
+import type { File, PublicationReadyEvent } from '@tyukesz/react-native-readium';
 
 const MyComponent: React.FC = () => {
   const [file] = useState<File>({
@@ -238,6 +238,117 @@ const MyComponent: React.FC = () => {
 DRM is not supported at this time. However, there is a clear path to [support it via LCP](https://www.edrlab.org/readium-lcp/) and the intention is to eventually implement it.
 
 ## API
+
+## Highlight & Sentence APIs
+
+Quick reference for the sentence-extraction and highlighting primitives exported by the JS API.
+
+- Import (named functions):
+
+```ts
+import {
+  highlightRange,
+  highlightSentence,
+  highlightSentenceFromProgression,
+  navigateTo,
+  navigateToProgression,
+  getChapterSentencePage,
+  getChapterSentences,
+  getSentenceIndexFromProgression,
+  clearHighlight,
+} from '@tyukesz/react-native-readium'
+```
+
+- Notes:
+  - The JS API prefers a single named-arguments object for calls that have multiple parameters. Example: `highlightSentence(ref, { href, sentenceIndex, style })`.
+  - Style-aware native methods are optional on older native installs. When a `style` is provided and the native side supports it, the library will call the style-aware native entrypoint automatically. If not available, the call falls back to the default platform highlight style and a warning is logged.
+  - Highlighting no longer navigates the reader. Call `navigateTo(...)` / `navigateToProgression(...)` explicitly if you want to jump.
+
+- `HighlightStyle` (optional):
+  - `tint?: string` — Hex color string: `"#RRGGBB"`, `"#AARRGGBB"`, or `"0xAARRGGBB"`.
+  - `isActive?: boolean` — Platform-dependent flag that controls active vs inactive decoration appearance. (if `true` then the text is underlined)
+
+- Functions & behavior (short):
+  - `highlightRange(viewRef, { href, startProgression, endProgression, style? })` — Best-effort highlight across a progression range.
+  - `highlightSentence(viewRef, { href, sentenceIndex, style? })` — Highlight the given sentence index.
+  - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
+  - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
+  - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
+  - `getSentenceIndexFromProgression(viewRef, { href, progression })` — Promise<number> mapping a progression (0..1) into a sentence index.
+  - `clearHighlight(viewRef)` — Removes any active highlight decorations.
+
+- Examples:
+
+```ts
+// Highlight a sentence with a hex tint string
+highlightSentence(ref, { href: 'text/chapter-1.xhtml', sentenceIndex: 0, style: { tint: '#00FF00', isActive: true } })
+
+// Highlight a progression range with a hex ARGB string
+highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endProgression: 0.12, style: { tint: '#80FF0000' } })
+
+// Highlight sentence nearest to progression and get its index
+const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
+
+// Navigate explicitly (e.g. after a highlight, or for Table of Contents)
+await navigateToProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42 })
+
+// Note: On publications with discrete positions/pages, navigateToProgression will navigate to the
+// page that CONTAINS the requested progression (floor), rather than snapping to the nearest page.
+// It does this using the publication positions received via onPublicationReady (handled internally).
+
+// Or navigate to a Link/Locator object
+await navigateTo(ref, { href: 'text/chapter-1.xhtml', type: 'application/xhtml+xml', locations: { progression: 0 } })
+
+// Page sentences (total + items)
+const page = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 50 })
+console.log(page.total, page.items)
+
+// Get all sentences as strings
+const sentences = await getChapterSentences(ref, 'text/chapter-1.xhtml')
+
+// Map progression -> sentence index
+const idx2 = await getSentenceIndexFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.5 })
+
+// Clear active highlight
+clearHighlight(ref)
+```
+
+## Visible Text APIs
+
+The library also exposes a native-only helper for extracting the currently visible text range.
+
+- Import:
+
+```ts
+import { getVisibleTextRange } from '@tyukesz/react-native-readium'
+```
+
+- `getVisibleTextRange(viewRef, options?)` (native only)
+  - Returns a `Promise` resolving to:
+    - `href: string`
+    - `start: number`, `end: number`, `totalChars: number`
+    - `text?: string`, `isTruncated?: boolean`
+    - `rangeSource?: 'approx' | 'viewport'`
+    - `position?: number` (when available)
+  - Options:
+    - `includeText?: boolean` (default `true`)
+    - `maxTextLength?: number` (optional)
+    - `source?: 'approx' | 'viewport'`
+      - `viewport`: queries the rendered WebView DOM and returns the visible substring.
+      - `approx`: uses sentence/segment indices (fast, stable; may be less precise than `viewport`).
+
+If you only need offsets (without the text), call:
+
+```ts
+const { href, start, end, totalChars } = await getVisibleTextRange(ref, { includeText: false })
+```
+
+Notes:
+- The returned `text` is normalized to be JS-friendly: `\r`, `\n`, and `\t` are replaced with spaces.
+- For `source: 'viewport'`, global leading/trailing whitespace is trimmed from the document text before computing offsets.
+- If you call `getVisibleTextRange` immediately after a navigation/chapter change, the WebView may still be rendering.
+  For best results, call after your `onLocationChange` handler fires (or after a short delay).
+
 
 #### View Props
 
