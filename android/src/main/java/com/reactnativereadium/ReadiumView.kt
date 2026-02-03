@@ -4,6 +4,7 @@ import android.util.Log
 import android.view.Choreographer
 import android.view.GestureDetector
 import android.view.MotionEvent
+import android.view.View
 import android.widget.FrameLayout
 import androidx.fragment.app.FragmentActivity
 import com.facebook.react.bridge.Arguments
@@ -37,6 +38,9 @@ class ReadiumView(
   var isViewInitialized: Boolean = false
   var isFragmentAdded: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
+  var lateInitHighlightRangeJson: String? = null
+  var lateInitHighlightSentenceJson: String? = null
+  private var pendingLocation: LinkOrLocator? = null
   private var frameCallback: Choreographer.FrameCallback? = null
   
 
@@ -55,7 +59,41 @@ class ReadiumView(
   )
 
   fun updateLocation(location: LinkOrLocator) : Boolean {
-    return fragment?.go(location, true) ?: false
+    // When using react-native-screens (native stack), the previous screen is often detached / not visible.
+    // Navigating the Readium navigator while not visible can update internal state without updating the
+    // rendered WebView. Queue the latest requested location and apply it once visible again.
+    pendingLocation = location
+
+    // Always schedule a retry on the next UI tick (helps during screen transition).
+    post { applyPendingLocationIfAny() }
+
+    val frag = fragment ?: return false
+    if (!isFragmentReadyForNavigation(frag)) {
+      return false
+    }
+
+    val ok = frag.go(location, true)
+    if (ok) pendingLocation = null
+    return ok
+  }
+
+  private fun isFragmentReadyForNavigation(frag: BaseReaderFragment): Boolean {
+    // `isVisible/isResumed` are critical here: with native stack + screens, the view can be attached
+    // while the fragment is not actually visible yet.
+    if (windowVisibility != View.VISIBLE || !isShown) return false
+    if (!frag.isAdded) return false
+    if (!frag.isResumed) return false
+    if (!frag.isVisible) return false
+    if (frag.view == null) return false
+    return true
+  }
+
+  private fun applyPendingLocationIfAny() {
+    val loc = pendingLocation ?: return
+    val frag = fragment ?: return
+    if (!isFragmentReadyForNavigation(frag)) return
+
+    if (frag.go(loc, false)) pendingLocation = null
   }
 
   fun updatePreferencesFromJsonString(preferences: String?) {
@@ -67,6 +105,16 @@ class ReadiumView(
     (fragment as? EpubReaderFragment)?.updatePreferencesFromJsonString(preferences)
   }
 
+  fun updateHighlightRangeFromJsonString(highlightRange: String?) {
+    lateInitHighlightRangeJson = highlightRange
+    (fragment as? EpubReaderFragment)?.applyHighlightRangeFromJsonString(highlightRange)
+  }
+
+  fun updateHighlightSentenceFromJsonString(highlightSentence: String?) {
+    lateInitHighlightSentenceJson = highlightSentence
+    (fragment as? EpubReaderFragment)?.applyHighlightSentenceFromJsonString(highlightSentence)
+  }
+
   fun addFragment(frag: BaseReaderFragment) {
     if (isFragmentAdded) {
       return
@@ -76,6 +124,8 @@ class ReadiumView(
     isFragmentAdded = true
     setupLayout()
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
+    lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
+    lateInitHighlightSentenceJson?.let { updateHighlightSentenceFromJsonString(it) }
     val activity = reactContext.currentActivity as? FragmentActivity
     if (activity == null) {
       Log.w(TAG, "Current activity is not a FragmentActivity; cannot add fragment")
@@ -85,6 +135,9 @@ class ReadiumView(
         .replace(this.id, frag, this.id.toString())
         .commitNow()
     }
+
+    // Apply any pending location after the fragment is actually attached.
+    post { applyPendingLocationIfAny() }
 
     // Ensure the fragment's view fills the container
     frag.view?.layoutParams = FrameLayout.LayoutParams(
@@ -175,6 +228,22 @@ class ReadiumView(
       }
     }
     frameCallback = null
+  }
+
+  override fun onAttachedToWindow() {
+    super.onAttachedToWindow()
+    // React Native screens may detach/attach views; restore the layout loop if needed.
+    if (frameCallback == null && isFragmentAdded) {
+      setupLayout()
+    }
+    applyPendingLocationIfAny()
+  }
+
+  override fun onWindowVisibilityChanged(visibility: Int) {
+    super.onWindowVisibilityChanged(visibility)
+    if (visibility == View.VISIBLE) {
+      applyPendingLocationIfAny()
+    }
   }
 
   /**

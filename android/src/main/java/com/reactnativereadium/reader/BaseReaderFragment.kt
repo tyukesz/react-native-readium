@@ -25,6 +25,8 @@ abstract class BaseReaderFragment : Fragment() {
     lifecycleScope
   )
 
+  protected var publicationPositions: List<Locator> = emptyList()
+
   protected abstract val model: ReaderViewModel
   protected abstract val navigator: Navigator
 
@@ -46,6 +48,8 @@ abstract class BaseReaderFragment : Fragment() {
       } catch (e: Exception) {
         emptyList<Locator>()
       }
+
+      publicationPositions = positions
 
       // Normalize metadata to ensure consistent structure across platforms
       // This uses spec-based normalization to handle LocalizedStrings and other

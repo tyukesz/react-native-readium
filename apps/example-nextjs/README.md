@@ -1,6 +1,6 @@
 # React Native Readium - Next.js Example
 
-This is a Next.js web example demonstrating the use of `react-native-readium` in a web environment using `react-native-web`.
+This is a Next.js web example demonstrating the use of `@tyukesz/react-native-readium` in a web environment using `react-native-web`.
 
 ## Features
 
