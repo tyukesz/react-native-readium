@@ -214,8 +214,9 @@ class ReadiumView : UIView, Loggable {
         return payload
       }
 
-      // Explicitly requested viewport extraction but it failed — surface an error
-      throw NSError(domain: "readium", code: 3, userInfo: [NSLocalizedDescriptionKey: "viewport extraction failed"])
+      // Explicitly requested viewport extraction but it failed.
+      // Do NOT reject; fall back to approx while surfacing diagnostics.
+      // This keeps behavior aligned with Android (best-effort result).
     }
 
     let sentences = await getSentencesForHref(hrefKey)
@@ -252,6 +253,13 @@ class ReadiumView : UIView, Loggable {
       "totalChars": totalChars,
       "rangeSource": "approx",
     ]
+
+    if sourceNorm == "viewport" {
+      payload["requestedRangeSource"] = "viewport"
+      if let reason = viewportTextExtractor.lastFailureReason {
+        payload["viewportFailureReason"] = reason
+      }
+    }
 
     if includeText {
       let maxLen = (maxTextLength ?? Int.max)

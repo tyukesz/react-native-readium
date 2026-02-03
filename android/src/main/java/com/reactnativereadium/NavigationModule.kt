@@ -45,7 +45,11 @@ class NavigationModule(private val reactContext: ReactApplicationContext) :
   }
 
   private fun locationToLinkOrLocator(location: ReadableMap): LinkOrLocator? {
-    val json = JSONObject(location.toHashMap() as HashMap<*, *>)
+    val json = try {
+      JSONObject(location.toHashMap())
+    } catch (_: Throwable) {
+      return null
+    }
     val hasLocations = json.has("locations")
     val hasType = json.has("type") && !json.optString("type").isNullOrEmpty()
     val hasChildren = json.has("children")

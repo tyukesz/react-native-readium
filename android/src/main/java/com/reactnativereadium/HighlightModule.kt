@@ -15,6 +15,37 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName(): String = NAME
 
+  private inline fun withEpubReaderFragment(
+    reactTag: Int,
+    href: String,
+    promise: Promise,
+    block: (fragment: EpubReaderFragment) -> Unit
+  ) {
+    val activity = reactContext.currentActivity
+    if (activity == null) {
+      promise.reject("no_activity", "Current activity is null")
+      return
+    }
+    if (href.isBlank()) {
+      promise.reject("invalid_args", "href is required")
+      return
+    }
+
+    val view = activity.findViewById<ReadiumView>(reactTag)
+    if (view == null) {
+      promise.reject("not_found", "ReadiumView not found for reactTag")
+      return
+    }
+
+    val fragment = view.fragment as? EpubReaderFragment
+    if (fragment == null) {
+      promise.reject("not_ready", "Reader is not ready yet")
+      return
+    }
+
+    block(fragment)
+  }
+
   @ReactMethod
   fun highlightRange(
     reactTag: Int,
@@ -237,38 +268,18 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     progression: Double,
     promise: Promise
   ) {
-    val activity = reactContext.currentActivity
-    if (activity == null) {
-      promise.reject("no_activity", "Current activity is null")
-      return
+    withEpubReaderFragment(reactTag, href, promise) { fragment ->
+      fragment.getSentenceIndexFromProgressionAsync(
+        href,
+        progression,
+        onSuccess = { index ->
+          promise.resolve(index)
+        },
+        onError = { error ->
+          promise.reject("sentences_error", error.message, error)
+        }
+      )
     }
-    if (href.isBlank()) {
-      promise.reject("invalid_args", "href is required")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
-
-    fragment.getSentenceIndexFromProgressionAsync(
-      href,
-      progression,
-      onSuccess = { index ->
-        promise.resolve(index)
-      },
-      onError = { error ->
-        promise.reject("sentences_error", error.message, error)
-      }
-    )
   }
 
   @ReactMethod
@@ -278,39 +289,19 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     progression: Double,
     promise: Promise
   ) {
-    val activity = reactContext.currentActivity
-    if (activity == null) {
-      promise.reject("no_activity", "Current activity is null")
-      return
+    withEpubReaderFragment(reactTag, href, promise) { fragment ->
+      fragment.getSentenceIndexFromProgressionAsync(
+        href,
+        progression,
+        onSuccess = { index ->
+          highlightSentence(reactTag, href, index)
+          promise.resolve(index)
+        },
+        onError = { error ->
+          promise.reject("sentences_error", error.message, error)
+        }
+      )
     }
-    if (href.isBlank()) {
-      promise.reject("invalid_args", "href is required")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
-
-    fragment.getSentenceIndexFromProgressionAsync(
-      href,
-      progression,
-      onSuccess = { index ->
-        highlightSentence(reactTag, href, index)
-        promise.resolve(index)
-      },
-      onError = { error ->
-        promise.reject("sentences_error", error.message, error)
-      }
-    )
   }
 
   @ReactMethod
@@ -321,39 +312,19 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     style: ReadableMap?,
     promise: Promise
   ) {
-    val activity = reactContext.currentActivity
-    if (activity == null) {
-      promise.reject("no_activity", "Current activity is null")
-      return
+    withEpubReaderFragment(reactTag, href, promise) { fragment ->
+      fragment.getSentenceIndexFromProgressionAsync(
+        href,
+        progression,
+        onSuccess = { index ->
+          highlightSentenceWithStyle(reactTag, href, index, style)
+          promise.resolve(index)
+        },
+        onError = { error ->
+          promise.reject("sentences_error", error.message, error)
+        }
+      )
     }
-    if (href.isBlank()) {
-      promise.reject("invalid_args", "href is required")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
-
-    fragment.getSentenceIndexFromProgressionAsync(
-      href,
-      progression,
-      onSuccess = { index ->
-        highlightSentenceWithStyle(reactTag, href, index, style)
-        promise.resolve(index)
-      },
-      onError = { error ->
-        promise.reject("sentences_error", error.message, error)
-      }
-    )
   }
 
   @ReactMethod

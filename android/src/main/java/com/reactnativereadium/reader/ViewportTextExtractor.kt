@@ -93,6 +93,9 @@ class ViewportTextExtractor {
   companion object {
     private val VIEWPORT_TEXT_JS = """
       (function() {
+        var DOC = document;
+        var BODY = DOC.body;
+
         function sanitizeText(s) {
           if (!s) return "";
           // Replace disruptive whitespace without changing length.
@@ -120,13 +123,13 @@ class ViewportTextExtractor {
         }
 
         function caretFromPoint(x, y) {
-          if (document.caretRangeFromPoint) {
-            return document.caretRangeFromPoint(x, y);
+          if (DOC.caretRangeFromPoint) {
+            return DOC.caretRangeFromPoint(x, y);
           }
-          if (document.caretPositionFromPoint) {
-            var pos = document.caretPositionFromPoint(x, y);
+          if (DOC.caretPositionFromPoint) {
+            var pos = DOC.caretPositionFromPoint(x, y);
             if (!pos) return null;
-            var r = document.createRange();
+            var r = DOC.createRange();
             r.setStart(pos.offsetNode, pos.offset);
             r.collapse(true);
             return r;
@@ -147,8 +150,8 @@ class ViewportTextExtractor {
         function preLengthForCaret(caret) {
           if (!caret) return null;
           try {
-            var r = document.createRange();
-            r.selectNodeContents(document.body);
+            var r = DOC.createRange();
+            r.selectNodeContents(BODY);
             r.setEnd(caret.startContainer, caret.startOffset);
             return sanitizeText(r.toString()).length;
           } catch (e) {
@@ -170,7 +173,7 @@ class ViewportTextExtractor {
             if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return false;
             var text = textNode.nodeValue || "";
             if (charOffset < 0 || charOffset >= text.length) return false;
-            var r = document.createRange();
+            var r = DOC.createRange();
             r.setStart(textNode, charOffset);
             r.setEnd(textNode, charOffset + 1);
             var rects = r.getClientRects();
@@ -186,7 +189,7 @@ class ViewportTextExtractor {
 
         function makeCaret(node, offset) {
           try {
-            var r = document.createRange();
+            var r = DOC.createRange();
             r.setStart(node, offset);
             r.collapse(true);
             return r;
@@ -195,9 +198,31 @@ class ViewportTextExtractor {
           }
         }
 
+        function isInNormalFlow(textNode) {
+          try {
+            if (!textNode) return false;
+            var el = (textNode.nodeType === Node.ELEMENT_NODE)
+              ? textNode
+              : (textNode.parentElement || null);
+            var hops = 0;
+            while (el && hops++ < 16) {
+              var style = window.getComputedStyle ? window.getComputedStyle(el) : null;
+              if (style) {
+                var pos = style.position;
+                if (pos === 'fixed' || pos === 'sticky') return false;
+                if (style.display === 'none' || style.visibility === 'hidden') return false;
+              }
+              el = el.parentElement;
+            }
+            return true;
+          } catch (e) {
+            return false;
+          }
+        }
+
         function createTextWalker() {
-          return document.createTreeWalker(
-            document.body,
+          return DOC.createTreeWalker(
+            BODY,
             NodeFilter.SHOW_TEXT,
             {
               acceptNode: function(n) {
@@ -223,6 +248,72 @@ class ViewportTextExtractor {
           walker.currentNode = fromTextNode;
           var n = walker.nextNode();
           return n || null;
+        }
+
+        function normalizeCaretToVisibleText(caret, vw, vh) {
+          try {
+            if (!caret) return null;
+
+            var walker = createTextWalker();
+            var node = caret.startContainer;
+            var offset = caret.startOffset;
+            if (!node) return null;
+
+            if (node.nodeType !== Node.TEXT_NODE) {
+              var first = firstTextInOrAfter(walker, node);
+              if (!first) return null;
+              node = first;
+              offset = 0;
+            }
+
+            var text = node.nodeValue || "";
+            if (!text || text.length === 0) return null;
+
+            // caret offsets are between characters; try the character at the offset
+            // first, then the previous one.
+            var idx = offset;
+            if (idx >= text.length) idx = text.length - 1;
+            if (idx < 0) idx = 0;
+
+            var ok = isCharVisible(node, idx, vw, vh);
+            if (!ok && idx > 0) ok = isCharVisible(node, idx - 1, vw, vh);
+            if (!ok) return null;
+
+            if (!isInNormalFlow(node)) return null;
+
+            return { node: node, offset: offset };
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function isCaretVisible(caret, vw, vh) {
+          return !!normalizeCaretToVisibleText(caret, vw, vh);
+        }
+
+        function scanDownForVisibleCaret(x, yStart, vw, vh, margin) {
+          var step = 16;
+          var y = yStart;
+          var maxY = Math.min(vh - margin, yStart + Math.min(Math.floor(vh * 0.35), 420));
+          while (y <= maxY) {
+            var c = caretAt(x, y, vw, vh);
+            if (isCaretVisible(c, vw, vh)) return c;
+            y += step;
+          }
+          return null;
+        }
+
+        function scanUpForVisibleCaret(x, yStart, vw, vh, margin) {
+          var step = 16;
+          var y = yStart;
+          var minY = margin;
+          var limit = 0;
+          while (y >= minY && limit++ < 48) {
+            var c = caretAt(x, y, vw, vh);
+            if (isCaretVisible(c, vw, vh)) return c;
+            y -= step;
+          }
+          return null;
         }
 
         function extendEndCaretToLastVisibleChar(caret, vw, vh, maxSteps) {
@@ -290,8 +381,8 @@ class ViewportTextExtractor {
         var vw = window.innerWidth || document.documentElement.clientWidth || 0;
         var vh = window.innerHeight || document.documentElement.clientHeight || 0;
 
-        var fullRange = document.createRange();
-        fullRange.selectNodeContents(document.body);
+        var fullRange = DOC.createRange();
+        fullRange.selectNodeContents(BODY);
         var fullText = sanitizeText(fullRange.toString() || "");
 
         // Prefer probe points away from the edges to avoid picking clipped glyphs from adjacent columns.
@@ -302,6 +393,7 @@ class ViewportTextExtractor {
           [Math.floor(vw * 0.25), margin],
           [Math.floor(vw * 0.5), margin],
           [margin, Math.floor(vh * 0.25)],
+          [Math.floor(vw * 0.5), Math.floor(vh * 0.5)],
         ];
 
         var endCandidates = [
@@ -317,10 +409,27 @@ class ViewportTextExtractor {
         for (var si = 0; si < startCandidates.length; si++) {
           var pt = startCandidates[si];
           var c = caretAt(pt[0], pt[1], vw, vh);
+          if (!isCaretVisible(c, vw, vh)) continue;
           var l = preLengthForCaret(c);
           if (l === null) continue;
           if (startLen === null || l < startLen) {
             startLen = l;
+          }
+        }
+
+        // On chapter end pages, some probe points can land in blank layout areas.
+        // In that case, caret-from-point may snap to an off-screen column near the
+        // beginning of the document. Scan downward to find the first visible caret.
+        if (startLen === null) {
+          for (var si2 = 0; si2 < startCandidates.length; si2++) {
+            var pt3 = startCandidates[si2];
+            var c3 = scanDownForVisibleCaret(pt3[0], pt3[1], vw, vh, margin);
+            if (!c3) continue;
+            var l3 = preLengthForCaret(c3);
+            if (l3 === null) continue;
+            if (startLen === null || l3 < startLen) {
+              startLen = l3;
+            }
           }
         }
 
@@ -329,11 +438,28 @@ class ViewportTextExtractor {
         for (var ei = 0; ei < endCandidates.length; ei++) {
           var pt2 = endCandidates[ei];
           var c2 = caretAt(pt2[0], pt2[1], vw, vh);
+          if (!isCaretVisible(c2, vw, vh)) continue;
           var l2 = preLengthForCaret(c2);
           if (l2 === null) continue;
           if (endLen === null || l2 > endLen) {
             endLen = l2;
             endCaret = c2;
+          }
+        }
+
+        // Similar to the start probing, scan upward if the bottom-edge probes land
+        // in blank space (common on the last page).
+        if (!endCaret) {
+          for (var ei2 = 0; ei2 < endCandidates.length; ei2++) {
+            var pt4 = endCandidates[ei2];
+            var c4 = scanUpForVisibleCaret(pt4[0], pt4[1], vw, vh, margin);
+            if (!c4) continue;
+            var l4 = preLengthForCaret(c4);
+            if (l4 === null) continue;
+            if (endLen === null || l4 > endLen) {
+              endLen = l4;
+              endCaret = c4;
+            }
           }
         }
 

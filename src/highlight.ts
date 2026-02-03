@@ -1,5 +1,6 @@
-import { NativeModules, findNodeHandle, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import type { RefObject } from 'react';
+import { requireReactTag } from './utils/requireReactTag';
 
 export type HighlightRangeParams = {
   href: string;
@@ -67,9 +68,11 @@ type NativeHighlightModule = {
     endProgression: number,
     style: HighlightStyle
   ) => void;
-  highlightSentence?: (reactTag: number, href: string, sentenceIndex: number) =>
-    | void
-    | Promise<void>;
+  highlightSentence?: (
+    reactTag: number,
+    href: string,
+    sentenceIndex: number
+  ) => void | Promise<void>;
   highlightSentenceWithStyle?: (
     reactTag: number,
     href: string,
@@ -109,18 +112,13 @@ const NativeHighlight: NativeHighlightModule | undefined = (
 function validateHighlightStyle(style?: HighlightStyle): void {
   if (!style) return;
   if (style.tint != null && typeof style.tint !== 'string') {
-    throw new Error('style.tint must be a string ("#RRGGBB", "#AARRGGBB", or "0x...")');
+    throw new Error(
+      'style.tint must be a string ("#RRGGBB", "#AARRGGBB", or "0x...")'
+    );
   }
 }
 
-function requireReactTag(viewRef: RefObject<any> | any): number {
-  const node = viewRef && 'current' in viewRef ? viewRef.current : viewRef;
-  const reactTag = findNodeHandle(node);
-  if (!reactTag) {
-    throw new Error('Could not resolve reactTag for ReadiumView');
-  }
-  return reactTag;
-}
+// requireReactTag lives in src/utils/requireReactTag.ts
 
 export function highlightRange(
   viewRef: RefObject<any> | any,
@@ -160,13 +158,18 @@ export function highlightRange(
   if (style && !NativeHighlight.highlightRangeWithStyle) {
     // Keep backward compatibility but make the silent fallback visible.
     // Without the WithStyle native method, iOS will use its default highlight tint.
-    // eslint-disable-next-line no-console
+
     console.warn(
       '[react-native-readium] highlightRange: native highlightRangeWithStyle is not available; falling back to default highlight style.'
     );
   }
 
-  NativeHighlight.highlightRange(requireReactTag(viewRef), params.href, start, end);
+  NativeHighlight.highlightRange(
+    requireReactTag(viewRef),
+    params.href,
+    start,
+    end
+  );
 }
 
 export function clearHighlight(viewRef: RefObject<any> | any): void {
@@ -186,7 +189,9 @@ export async function getChapterSentences(
   href: string
 ): Promise<string[]> {
   if (!NativeHighlight?.getChapterSentences) {
-    throw new Error('Native HighlightModule.getChapterSentences is not available');
+    throw new Error(
+      'Native HighlightModule.getChapterSentences is not available'
+    );
   }
 
   const cleanHref = href?.trim();
@@ -194,7 +199,10 @@ export async function getChapterSentences(
     throw new Error('href is required');
   }
 
-  return NativeHighlight.getChapterSentences(requireReactTag(viewRef), cleanHref);
+  return NativeHighlight.getChapterSentences(
+    requireReactTag(viewRef),
+    cleanHref
+  );
 }
 
 export async function getChapterSentencePage(
@@ -214,7 +222,9 @@ export async function getChapterSentencePage(
   limit?: number
 ): Promise<SentencePage> {
   if (!NativeHighlight?.getChapterSentencePage) {
-    throw new Error('Native HighlightModule.getChapterSentencePage is not available');
+    throw new Error(
+      'Native HighlightModule.getChapterSentencePage is not available'
+    );
   }
 
   const resolvedHref =
@@ -260,9 +270,7 @@ export async function getSentenceIndexFromProgression(
   const resolvedHref =
     typeof hrefOrParams === 'string' ? hrefOrParams : hrefOrParams?.href;
   const resolvedProgression =
-    typeof hrefOrParams === 'string'
-      ? progression
-      : hrefOrParams?.progression;
+    typeof hrefOrParams === 'string' ? progression : hrefOrParams?.progression;
 
   const cleanHref = resolvedHref?.trim();
   if (!cleanHref) {
@@ -295,6 +303,8 @@ export async function highlightSentenceFromProgression(
   hrefOrParams: string | HighlightSentenceFromProgressionParams,
   progression?: number
 ): Promise<number> {
+  const reactTag = requireReactTag(viewRef);
+
   const resolvedHref =
     typeof hrefOrParams === 'string' ? hrefOrParams : hrefOrParams?.href;
   const cleanHref = resolvedHref?.trim();
@@ -315,7 +325,7 @@ export async function highlightSentenceFromProgression(
 
   if (style && NativeHighlight?.highlightSentenceFromProgressionWithStyle) {
     return NativeHighlight.highlightSentenceFromProgressionWithStyle(
-      requireReactTag(viewRef),
+      reactTag,
       cleanHref,
       p,
       style
@@ -332,7 +342,7 @@ export async function highlightSentenceFromProgression(
   }
 
   return NativeHighlight.highlightSentenceFromProgression(
-    requireReactTag(viewRef),
+    reactTag,
     cleanHref,
     p
   );
@@ -342,8 +352,12 @@ export function highlightSentence(
   viewRef: RefObject<any> | any,
   params: HighlightSentenceParams
 ): void {
+  const reactTag = requireReactTag(viewRef);
+
   if (!NativeHighlight?.highlightSentence) {
-    throw new Error('Native HighlightModule.highlightSentence is not available');
+    throw new Error(
+      'Native HighlightModule.highlightSentence is not available'
+    );
   }
 
   const href = params?.href?.trim();
@@ -360,7 +374,7 @@ export function highlightSentence(
   validateHighlightStyle(style);
   if (style && NativeHighlight.highlightSentenceWithStyle) {
     (NativeHighlight.highlightSentenceWithStyle as any)(
-      requireReactTag(viewRef),
+      reactTag,
       href,
       idx,
       style
@@ -369,12 +383,11 @@ export function highlightSentence(
   }
 
   if (style && !NativeHighlight.highlightSentenceWithStyle) {
-    // eslint-disable-next-line no-console
     console.warn(
       '[react-native-readium] highlightSentence: native highlightSentenceWithStyle is not available; falling back to default highlight style.'
     );
   }
 
   // The native method is synchronous; ignoring potential Promise return keeps compatibility.
-  (NativeHighlight.highlightSentence as any)(requireReactTag(viewRef), href, idx);
+  (NativeHighlight.highlightSentence as any)(reactTag, href, idx);
 }

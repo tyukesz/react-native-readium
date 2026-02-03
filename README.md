@@ -320,7 +320,7 @@ The library also exposes a native-only helper for extracting the currently visib
 - Import:
 
 ```ts
-import { getVisibleTextRange, getVisibleCharacterRange } from '@tyukesz/react-native-readium'
+import { getVisibleTextRange } from '@tyukesz/react-native-readium'
 ```
 
 - `getVisibleTextRange(viewRef, options?)` (native only)
@@ -337,8 +337,11 @@ import { getVisibleTextRange, getVisibleCharacterRange } from '@tyukesz/react-na
       - `viewport`: queries the rendered WebView DOM and returns the visible substring.
       - `approx`: uses sentence/segment indices (fast, stable; may be less precise than `viewport`).
 
-- `getVisibleCharacterRange(viewRef)`
-  - Convenience wrapper that calls `getVisibleTextRange(..., { includeText: false })`.
+If you only need offsets (without the text), call:
+
+```ts
+const { href, start, end, totalChars } = await getVisibleTextRange(ref, { includeText: false })
+```
 
 Notes:
 - The returned `text` is normalized to be JS-friendly: `\r`, `\n`, and `\t` are replaced with spaces.

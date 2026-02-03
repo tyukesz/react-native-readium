@@ -10,7 +10,9 @@ export function setPositionsForReactTag(
   positionsByReactTag.set(reactTag, Array.isArray(positions) ? positions : []);
 }
 
-export function getPositionsForReactTag(reactTag: number): Locator[] | undefined {
+export function getPositionsForReactTag(
+  reactTag: number
+): Locator[] | undefined {
   if (!Number.isFinite(reactTag)) return undefined;
   return positionsByReactTag.get(reactTag);
 }

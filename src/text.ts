@@ -1,5 +1,6 @@
-import { NativeModules, findNodeHandle, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import type { RefObject } from 'react';
+import { requireReactTag } from './utils/requireReactTag';
 
 export type VisibleTextRange = {
   href: string;
@@ -9,6 +10,10 @@ export type VisibleTextRange = {
   text?: string;
   isTruncated?: boolean;
   rangeSource?: 'approx' | 'viewport';
+  /** What was requested via options.source (when surfaced by native). */
+  requestedRangeSource?: 'approx' | 'viewport';
+  /** Native diagnostic when viewport extraction fails and falls back to approx. */
+  viewportFailureReason?: string;
   /** Publication position number (when available on native). */
   position?: number;
 };
@@ -31,16 +36,8 @@ type NativeTextModule = {
   ) => Promise<VisibleTextRange>;
 };
 
-const NativeText: NativeTextModule | undefined = (NativeModules as any)?.TextModule;
-
-function requireReactTag(viewRef: RefObject<any> | any): number {
-  const node = viewRef && 'current' in viewRef ? viewRef.current : viewRef;
-  const reactTag = findNodeHandle(node);
-  if (!reactTag) {
-    throw new Error('Could not resolve reactTag for ReadiumView');
-  }
-  return reactTag;
-}
+const NativeText: NativeTextModule | undefined = (NativeModules as any)
+  ?.TextModule;
 
 export async function getVisibleTextRange(
   viewRef: RefObject<any> | any,
@@ -53,13 +50,4 @@ export async function getVisibleTextRange(
     throw new Error('Native TextModule is not available');
   }
   return NativeText.getVisibleTextRange(requireReactTag(viewRef), options);
-}
-
-export async function getVisibleCharacterRange(
-  viewRef: RefObject<any> | any
-): Promise<Pick<VisibleTextRange, 'href' | 'start' | 'end' | 'totalChars'>> {
-  const { href, start, end, totalChars } = await getVisibleTextRange(viewRef, {
-    includeText: false,
-  });
-  return { href, start, end, totalChars };
 }

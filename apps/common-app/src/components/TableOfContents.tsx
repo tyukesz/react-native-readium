@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { Text, ScrollView, View, StyleSheet } from 'react-native';
 import { ListItem } from '@rneui/themed';
 import type { Link } from '@tyukesz/react-native-readium';
@@ -15,23 +15,18 @@ export const TableOfContents: React.FC<TableOfContentsProps> = ({
   title = 'Table of Contents',
 }) => {
   const items = useMemo(() => externalItems || [], [externalItems]);
-  const handlePress = useCallback(
-    (item: Link) => {
-      if (onPress) onPress(item);
-    },
-    [onPress]
-  );
 
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
       <ScrollView style={styles.list}>
         {items.map((item, idx) => {
-          const itemKey = item.href ? `${item.href}-${idx}` : `${idx}`;
           return (
             <ListItem
-              key={itemKey}
-              onPress={() => handlePress(item)}
+              key={idx}
+              onPress={() => {
+                if (onPress) onPress(item);
+              }}
               bottomDivider={items.length - 1 !== idx}
             >
               <ListItem.Content>

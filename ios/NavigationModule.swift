@@ -14,12 +14,10 @@ class NavigationModule: NSObject, RCTBridgeModule {
     return true
   }
 
-  @objc(navigateTo:location:resolver:rejecter:)
-  func navigateTo(
+  private func withReadiumViewOrReject(
     _ reactTag: NSNumber,
-    location: NSDictionary,
-    resolver: @escaping RCTPromiseResolveBlock,
-    rejecter: @escaping RCTPromiseRejectBlock
+    rejecter: @escaping RCTPromiseRejectBlock,
+    _ body: @escaping (ReadiumView) -> Void
   ) {
     DispatchQueue.main.async {
       guard let uiManager = self.bridge.uiManager else {
@@ -32,6 +30,18 @@ class NavigationModule: NSObject, RCTBridgeModule {
         return
       }
 
+      body(view)
+    }
+  }
+
+  @objc(navigateTo:location:resolver:rejecter:)
+  func navigateTo(
+    _ reactTag: NSNumber,
+    location: NSDictionary,
+    resolver: @escaping RCTPromiseResolveBlock,
+    rejecter: @escaping RCTPromiseRejectBlock
+  ) {
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       Task { @MainActor in
         guard let navigator = view.readerViewController?.navigator else {
           // Not ready yet.

@@ -1,7 +1,8 @@
-import { NativeModules, findNodeHandle, Platform } from 'react-native';
+import { NativeModules, Platform } from 'react-native';
 import type { RefObject } from 'react';
 import type { Link, Locator } from './interfaces';
 import { getPositionsForReactTag } from './navigationCache';
+import { requireReactTag } from './utils/requireReactTag';
 
 export type NavigateToProgressionParams = {
   href: string;
@@ -13,17 +14,9 @@ type NativeNavigationModule = {
   navigateTo: (reactTag: number, location: Locator | Link) => Promise<boolean>;
 };
 
-const NativeNavigation: NativeNavigationModule | undefined = (NativeModules as any)
-  ?.NavigationModule;
-
-function requireReactTag(viewRef: RefObject<any> | any): number {
-  const node = viewRef && 'current' in viewRef ? viewRef.current : viewRef;
-  const reactTag = findNodeHandle(node);
-  if (!reactTag) {
-    throw new Error('Could not resolve reactTag for ReadiumView');
-  }
-  return reactTag;
-}
+const NativeNavigation: NativeNavigationModule | undefined = (
+  NativeModules as any
+)?.NavigationModule;
 
 export async function navigateTo(
   viewRef: RefObject<any> | any,

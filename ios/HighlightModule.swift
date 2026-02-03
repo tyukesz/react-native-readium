@@ -14,6 +14,35 @@ class HighlightModule: NSObject, RCTBridgeModule {
     return true
   }
 
+  private func withReadiumView(
+    _ reactTag: NSNumber,
+    _ body: @escaping (ReadiumView) -> Void
+  ) {
+    DispatchQueue.main.async {
+      guard let uiManager = self.bridge.uiManager else { return }
+      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else { return }
+      body(view)
+    }
+  }
+
+  private func withReadiumViewOrReject(
+    _ reactTag: NSNumber,
+    rejecter: @escaping RCTPromiseRejectBlock,
+    _ body: @escaping (ReadiumView) -> Void
+  ) {
+    DispatchQueue.main.async {
+      guard let uiManager = self.bridge.uiManager else {
+        rejecter("no_ui_manager", "UIManager not available", nil)
+        return
+      }
+      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
+        rejecter("not_found", "ReadiumView not found", nil)
+        return
+      }
+      body(view)
+    }
+  }
+
   @objc(highlightRange:href:startProgression:endProgression:)
   func highlightRange(
     _ reactTag: NSNumber,
@@ -21,15 +50,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     startProgression: NSNumber,
     endProgression: NSNumber
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        return
-      }
-
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        return
-      }
-
+    withReadiumView(reactTag) { view in
       view.highlightRange(
         href: href,
         startProgression: startProgression.doubleValue,
@@ -46,15 +67,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     endProgression: NSNumber,
     style: NSDictionary
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        return
-      }
-
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        return
-      }
-
+    withReadiumView(reactTag) { view in
       view.highlightRangeWithStyle(
         href: href,
         startProgression: startProgression.doubleValue,
@@ -66,9 +79,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
 
   @objc(clearHighlight:)
   func clearHighlight(_ reactTag: NSNumber) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else { return }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else { return }
+    withReadiumView(reactTag) { view in
       view.clearHighlight()
     }
   }
@@ -79,9 +90,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     href: String,
     sentenceIndex: NSNumber
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else { return }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else { return }
+    withReadiumView(reactTag) { view in
       view.highlightSentence(href: href, sentenceIndex: sentenceIndex.intValue)
     }
   }
@@ -93,9 +102,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     sentenceIndex: NSNumber,
     style: NSDictionary
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else { return }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else { return }
+    withReadiumView(reactTag) { view in
       view.highlightSentenceWithStyle(
         href: href,
         sentenceIndex: sentenceIndex.intValue,
@@ -113,16 +120,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     resolver: @escaping RCTPromiseResolveBlock,
     rejecter: @escaping RCTPromiseRejectBlock
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        rejecter("no_ui_manager", "UIManager not available", nil)
-        return
-      }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        rejecter("not_found", "ReadiumView not found", nil)
-        return
-      }
-
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       view.getChapterSentencePage(
         href: href,
         offset: offset.intValue,
@@ -143,16 +141,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     resolver: @escaping RCTPromiseResolveBlock,
     rejecter: @escaping RCTPromiseRejectBlock
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        rejecter("no_ui_manager", "UIManager not available", nil)
-        return
-      }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        rejecter("not_found", "ReadiumView not found", nil)
-        return
-      }
-
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       view.getChapterSentences(href: href) { sentences in
         resolver(sentences)
       }
@@ -167,16 +156,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     resolver: @escaping RCTPromiseResolveBlock,
     rejecter: @escaping RCTPromiseRejectBlock
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        rejecter("no_ui_manager", "UIManager not available", nil)
-        return
-      }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        rejecter("not_found", "ReadiumView not found", nil)
-        return
-      }
-
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       view.getSentenceIndexFromProgression(
         href: href,
         progression: progression.doubleValue
@@ -194,16 +174,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     resolver: @escaping RCTPromiseResolveBlock,
     rejecter: @escaping RCTPromiseRejectBlock
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        rejecter("no_ui_manager", "UIManager not available", nil)
-        return
-      }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        rejecter("not_found", "ReadiumView not found", nil)
-        return
-      }
-
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       view.highlightSentenceFromProgression(
         href: href,
         progression: progression.doubleValue
@@ -222,16 +193,7 @@ class HighlightModule: NSObject, RCTBridgeModule {
     resolver: @escaping RCTPromiseResolveBlock,
     rejecter: @escaping RCTPromiseRejectBlock
   ) {
-    DispatchQueue.main.async {
-      guard let uiManager = self.bridge.uiManager else {
-        rejecter("no_ui_manager", "UIManager not available", nil)
-        return
-      }
-      guard let view = uiManager.view(forReactTag: reactTag) as? ReadiumView else {
-        rejecter("not_found", "ReadiumView not found", nil)
-        return
-      }
-
+    withReadiumViewOrReject(reactTag, rejecter: rejecter) { view in
       view.highlightSentenceFromProgression(
         href: href,
         progression: progression.doubleValue,
