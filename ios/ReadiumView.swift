@@ -311,6 +311,12 @@ class ReadiumView : UIView, Loggable {
       self.updatePreferences(preferences)
     }
   }
+
+  @objc var hidePageNumbers: Bool = false {
+    didSet {
+      updatePageNumberVisibility()
+    }
+  }
   @objc var onLocationChange: RCTDirectEventBlock?
   @objc var onPublicationReady: RCTDirectEventBlock?
   @objc var onTap: RCTDirectEventBlock?
@@ -615,6 +621,10 @@ class ReadiumView : UIView, Loggable {
     super.removeFromSuperview()
   }
 
+  private func updatePageNumberVisibility() {
+    readerViewController?.setPositionLabelHidden(hidePageNumbers)
+  }
+
   private func addViewControllerAsSubview(_ vc: ReaderViewController) {
     vc.publisher.sink(
       receiveValue: { locator in
@@ -630,6 +640,8 @@ class ReadiumView : UIView, Loggable {
         "y": point.y
       ])
     }
+
+    updatePageNumberVisibility()
 
     // if the controller was just instantiated then apply any existing preferences
     if (preferences != nil) {

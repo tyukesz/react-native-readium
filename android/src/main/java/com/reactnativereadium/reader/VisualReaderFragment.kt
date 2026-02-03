@@ -73,4 +73,6 @@ abstract class VisualReaderFragment : BaseReaderFragment() {
             container.clearPadding()
         }
     }
+
+    open fun setPositionLabelHidden(hidden: Boolean) {}
 }
