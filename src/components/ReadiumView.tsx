@@ -6,7 +6,7 @@ import React, {
   useRef,
   useMemo,
 } from 'react';
-import { View, Platform, StyleSheet, findNodeHandle } from 'react-native';
+import { View, Platform, StyleSheet } from 'react-native';
 
 import type {
   BaseReadiumViewProps,
@@ -16,7 +16,6 @@ import type {
 import { getWidthOrHeightValue as dimension } from '../utils';
 import { BaseReadiumView } from './BaseReadiumView';
 import { Commands } from '../ReadiumViewNativeComponent';
-import { setPositionsForReactTag } from '../navigationCache';
 
 export type ReadiumProps = Omit<BaseReadiumViewProps, 'preferences'> & {
   preferences: Preferences;
@@ -66,14 +65,6 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
 
     const onPublicationReady = useCallback(
       (event: any) => {
-        // Cache positions for navigation helpers (navigateToProgression floors to the containing page).
-        const reactTag =
-          typeof event?.target === 'number'
-            ? event.target
-            : findNodeHandle(defaultRef.current);
-        if (typeof reactTag === 'number') {
-          setPositionsForReactTag(reactTag, event?.nativeEvent?.positions);
-        }
         if (wrappedOnPublicationReady) {
           wrappedOnPublicationReady(event.nativeEvent);
         }

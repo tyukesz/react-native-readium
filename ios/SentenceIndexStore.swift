@@ -371,7 +371,11 @@ final class SentenceIndexStore {
       let len = item.text.count
       let end = start + len
       let charProgression = Double(start) / Double(totalChars)
-      let sourceProgression = item.locator.locations.progression ?? charProgression
+      // Segment locators are often anchored at the start of a block (eg. paragraph) which may span
+      // multiple pages; using that progression can pin later sentences to an earlier page.
+      // Use a monotonic estimate based on the sentence's character offset.
+      let locatorProgression = item.locator.locations.progression ?? 0.0
+      let sourceProgression = max(charProgression, locatorProgression)
       let boundaryIndex = positionBoundaries.isEmpty ? 0 : findBoundaryIndex(sourceProgression)
       drafts.append(
         Draft(

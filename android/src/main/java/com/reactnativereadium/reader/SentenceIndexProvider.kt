@@ -48,7 +48,15 @@ class SentenceIndexProvider(
       } else {
         0.0
       }
-      val sourceProgression = findSegmentProgressionForOffset(segmentOffsets, span.start) ?: charProgression
+      // Segment locators can span across multiple pages, in which case `segment.locator.locations.progression`
+      // is too coarse (many sentences get pinned to the segment start progression and navigation lands
+      // one page early). Prefer a monotonic, per-sentence estimate based on the sentence's character offset.
+      val segmentProgression = findSegmentProgressionForOffset(segmentOffsets, span.start)
+      val sourceProgression = if (segmentProgression != null) {
+        maxOf(charProgression, segmentProgression)
+      } else {
+        charProgression
+      }
       val boundaryIndex = if (positionBoundaries.isEmpty()) 0 else positionResolverProvider()
         .boundaryIndexForProgression(href, sourceProgression)
       SentenceDraft(
