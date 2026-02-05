@@ -12,7 +12,7 @@ import {
   getChapterSentencePage,
   getSentenceIndexFromProgression,
   highlightSentence,
-  navigateToProgression,
+  navigateTo,
   clearHighlight as clearNativeHighlight,
   getVisibleTextRange,
 } from '@tyukesz/react-native-readium';
@@ -113,19 +113,17 @@ export const Reader: React.FC<ReaderProps> = ({
           offset: idx,
           limit: 1,
         });
+        const item = page.items?.[0];
+        if (!item) {
+          throw new Error('Failed to resolve sentence page item');
+        }
 
-        const progression = page.items?.[0]?.progression;
-        if (typeof progression === 'number') {
-          console.log('navigateToProgression', {
-            href,
-            progression,
-            idx,
-            text: page.items[0].text,
-          });
-          await navigateToProgression(ref, { href, progression });
+        if (item.locator) {
+          console.log('navigateTo locator', item);
+          await navigateTo(ref, item.locator);
         }
       } catch (e) {
-        console.log('navigateToProgression failed', e);
+        console.log('navigateTo failed', e);
       }
     }
     setIsHighlightModalVisible(false);
@@ -137,9 +135,6 @@ export const Reader: React.FC<ReaderProps> = ({
   };
 
   const loadSentencesCount = useCallback(async () => {
-    // const progression = 0.2583060247038064;
-    // const href = 'OPS/main3.xml';
-    // await navigateToProgression(ref, { href, progression });
     const href = highlightHref.trim();
     if (!href) return;
     if (!isNative) {
@@ -203,7 +198,15 @@ export const Reader: React.FC<ReaderProps> = ({
       setSentenceIndexText(String(idx));
       highlightSentence(ref, { href, sentenceIndex: idx });
 
-      await navigateToProgression(ref, { href, progression: p });
+      const page = await getChapterSentencePage(ref, {
+        href,
+        offset: idx,
+        limit: 1,
+      });
+      const item = page.items?.[0];
+      if (item?.locator) {
+        await navigateTo(ref, item.locator);
+      }
     } catch (e) {
       console.log('getSentenceIndexFromProgression failed', e);
     }
@@ -254,11 +257,7 @@ export const Reader: React.FC<ReaderProps> = ({
               preferences={preferences}
               hidePageNumbers={true}
               onLocationChange={(locator: Locator) => {
-                console.log('onLocationChange', {
-                  href: locator.href,
-                  progression: locator.locations?.progression,
-                  title: locator.title,
-                });
+                console.log('onLocationChange', locator);
                 setLocation(locator);
               }}
               onPublicationReady={(event: PublicationReadyEvent) => {

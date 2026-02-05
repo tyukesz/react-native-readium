@@ -488,8 +488,8 @@ class ReadiumView : UIView, Loggable {
       let items = slice.map { s in
         [
           "index": s.index,
-          "progression": s.progression,
           "text": s.text,
+          "locator": s.locator.json,
         ]
       }
 

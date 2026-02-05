@@ -598,7 +598,7 @@ class EpubReaderFragment : VisualReaderFragment() {
       href: String,
       offset: Int,
       limit: Int,
-      onSuccess: (total: Int, items: List<SentenceEntry>) -> Unit,
+      onSuccess: (total: Int, items: List<SentencePageItem>) -> Unit,
       onError: (Throwable) -> Unit,
     ) {
       if (!this::navigator.isInitialized) {
@@ -614,13 +614,69 @@ class EpubReaderFragment : VisualReaderFragment() {
           val items = if (safeLimit == 0) {
             emptyList()
           } else {
-            index.sentences.drop(safeOffset).take(safeLimit)
+            index.sentences
+              .drop(safeOffset)
+              .take(safeLimit)
+              .map { s ->
+                SentencePageItem(
+                  index = s.index,
+                  text = s.text,
+                  locator = locatorForSentence(index, s),
+                )
+              }
           }
           onSuccess(total, items)
         } catch (e: Throwable) {
           onError(e)
         }
       }
+    }
+
+    data class SentencePageItem(
+      val index: Int,
+      val text: String,
+      val locator: Locator?,
+    )
+
+    private fun locatorForSentence(index: SentenceIndex, sentence: SentenceEntry): Locator? {
+      val segments = index.segments
+      if (segments.isEmpty()) return null
+
+      val startOffset = sentence.start
+      val endOffset = sentence.end
+
+      // Find the segment containing the sentence start.
+      var lo = 0
+      var hi = segments.lastIndex
+      var seg: SegmentOffset? = null
+      while (lo <= hi) {
+        val mid = (lo + hi) ushr 1
+        val s = segments[mid]
+        when {
+          startOffset < s.start -> hi = mid - 1
+          startOffset >= s.end -> lo = mid + 1
+          else -> {
+            seg = s
+            break
+          }
+        }
+      }
+      val resolved = seg ?: return null
+
+      val localStart = (startOffset - resolved.start).coerceIn(0, resolved.text.length)
+      val localEnd = (minOf(endOffset, resolved.end) - resolved.start)
+        .coerceIn(localStart, resolved.text.length)
+
+      if (localEnd <= localStart) return resolved.locator
+
+      val prefixStart = (localStart - TEXT_QUOTE_CONTEXT_CHARS).coerceAtLeast(0)
+      val suffixEnd = (localEnd + TEXT_QUOTE_CONTEXT_CHARS).coerceAtMost(resolved.text.length)
+      val before = resolved.text.substring(prefixStart, localStart).takeUnless { it.isBlank() }
+      val highlight = resolved.text.substring(localStart, localEnd)
+      val after = resolved.text.substring(localEnd, suffixEnd).takeUnless { it.isBlank() }
+      return resolved.locator.copy(
+        text = Locator.Text(before = before, highlight = highlight, after = after)
+      )
     }
 
     fun getSentenceIndexFromProgressionAsync(

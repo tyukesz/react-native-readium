@@ -251,7 +251,6 @@ import {
   highlightSentence,
   highlightSentenceFromProgression,
   navigateTo,
-  navigateToProgression,
   getChapterSentencePage,
   getChapterSentences,
   getSentenceIndexFromProgression,
@@ -262,8 +261,7 @@ import {
 - Notes:
   - The JS API prefers a single named-arguments object for calls that have multiple parameters. Example: `highlightSentence(ref, { href, sentenceIndex, style })`.
   - Style-aware native methods are optional on older native installs. When a `style` is provided and the native side supports it, the library will call the style-aware native entrypoint automatically. If not available, the call falls back to the default platform highlight style and a warning is logged.
-  - Highlighting no longer navigates the reader. Call `navigateTo(...)` / `navigateToProgression(...)` explicitly if you want to jump.
-
+  
 - `HighlightStyle` (optional):
   - `tint?: string` — Hex color string: `"#RRGGBB"`, `"#AARRGGBB"`, or `"0xAARRGGBB"`.
   - `isActive?: boolean` — Platform-dependent flag that controls active vs inactive decoration appearance. (if `true` then the text is underlined)
@@ -274,6 +272,7 @@ import {
   - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
   - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
   - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
+    - Each `items[]` entry is `{ index: number, text: string, locator?: Locator }`.
   - `getSentenceIndexFromProgression(viewRef, { href, progression })` — Promise<number> mapping a progression (0..1) into a sentence index.
   - `clearHighlight(viewRef)` — Removes any active highlight decorations.
 
@@ -290,11 +289,11 @@ highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endPr
 const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
 
 // Navigate explicitly (e.g. after a highlight, or for Table of Contents)
-await navigateToProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42 })
-
-// Note: On publications with discrete positions/pages, navigateToProgression will navigate to the
-// page that CONTAINS the requested progression (floor), rather than snapping to the nearest page.
-// It does this using the publication positions received via onPublicationReady (handled internally).
+await navigateTo(ref, {
+  href: 'text/chapter-1.xhtml',
+  type: 'application/xhtml+xml',
+  locations: { progression: 0.42 },
+})
 
 // Or navigate to a Link/Locator object
 await navigateTo(ref, { href: 'text/chapter-1.xhtml', type: 'application/xhtml+xml', locations: { progression: 0 } })
