@@ -8,6 +8,7 @@ import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.ReadableMap
 import com.facebook.react.bridge.ReadableType
 import com.reactnativereadium.reader.EpubReaderFragment
+import com.reactnativereadium.utils.toWritableMap
 import org.json.JSONObject
 
 class HighlightModule(private val reactContext: ReactApplicationContext) :
@@ -244,8 +245,8 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
                   Arguments.createMap().apply {
                     putInt("index", item.index)
                     putString("text", item.text)
-                    if (item.progression != null) {
-                      putDouble("progression", item.progression)
+                    if (item.locator != null) {
+                      putMap("locator", item.locator.toWritableMap())
                     }
                   }
                 )

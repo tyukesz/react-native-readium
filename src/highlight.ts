@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from 'react-native';
 import type { RefObject } from 'react';
 import { requireReactTag } from './utils/requireReactTag';
+import type { Locator } from './interfaces';
 
 export type HighlightRangeParams = {
   href: string;
@@ -29,7 +30,7 @@ export type HighlightStyle = {
 export type SentencePageItem = {
   index: number;
   text: string;
-  progression?: number;
+  locator?: Locator;
 };
 
 export type SentencePage = {
