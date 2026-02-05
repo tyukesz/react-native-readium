@@ -131,6 +131,10 @@ class ReaderViewController: UIViewController, Loggable {
     navigationBarHidden = !navigationBarHidden
   }
 
+  func setPositionLabelHidden(_ hidden: Bool) {
+    positionLabel.isHidden = hidden
+  }
+
   func updateNavigationBar(animated: Bool = true) {
     let hidden = navigationBarHidden && !UIAccessibility.isVoiceOverRunning
     navigationController?.setNavigationBarHidden(hidden, animated: animated)

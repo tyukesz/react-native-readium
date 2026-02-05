@@ -40,6 +40,7 @@ class ReadiumView(
   var lateInitSerializedUserPreferences: String? = null
   var lateInitHighlightRangeJson: String? = null
   var lateInitHighlightSentenceJson: String? = null
+  var hidePageNumbers: Boolean = false
   private var pendingLocation: LinkOrLocator? = null
   private var frameCallback: Choreographer.FrameCallback? = null
   
@@ -123,6 +124,7 @@ class ReadiumView(
     fragment = frag
     isFragmentAdded = true
     setupLayout()
+    updatePageNumberVisibility(hidePageNumbers)
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
     lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
     lateInitHighlightSentenceJson?.let { updateHighlightSentenceFromJsonString(it) }
@@ -169,6 +171,11 @@ class ReadiumView(
         }
       }
     }
+  }
+
+  fun updatePageNumberVisibility(hide: Boolean) {
+    hidePageNumbers = hide
+    (fragment as? VisualReaderFragment)?.setPositionLabelHidden(hide)
   }
 
   private fun sendEvent(eventName: String, payload: WritableMap?) {
