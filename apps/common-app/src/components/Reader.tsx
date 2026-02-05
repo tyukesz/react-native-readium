@@ -252,10 +252,11 @@ export const Reader: React.FC<ReaderProps> = ({
               file={file}
               location={location}
               preferences={preferences}
+              hidePageNumbers={true}
               onLocationChange={(locator: Locator) => {
                 console.log('onLocationChange', {
                   href: locator.href,
-                  progression: locator.locations.progression,
+                  progression: locator.locations?.progression,
                   title: locator.title,
                 });
                 setLocation(locator);

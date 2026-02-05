@@ -18,6 +18,7 @@ type OnTapEvent = Readonly<TapEvent>;
 export interface NativeProps extends ViewProps {
   file: File;
   preferences?: string;
+  hidePageNumbers?: boolean;
   onLocationChange?: DirectEventHandler<OnLocationChangeEvent>;
   onPublicationReady?: DirectEventHandler<OnPublicationReadyEvent>;
   onTap?: DirectEventHandler<OnTapEvent>;
