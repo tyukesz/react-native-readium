@@ -348,6 +348,51 @@ Notes:
 - If you call `getVisibleTextRange` immediately after a navigation/chapter change, the WebView may still be rendering.
   For best results, call after your `onLocationChange` handler fires (or after a short delay).
 
+## Headless publication index (TOC + positions)
+
+Use this when you need Readium **positions** (stable virtual pages) and TOC without mounting the `ReadiumView` UI.
+
+```ts
+import { openPublicationHeadless, cancelHeadless } from '@tyukesz/react-native-readium'
+
+const id = `index:${bookId}`
+try {
+  const { metadata, tableOfContents, positions, readingOrder } =
+    await openPublicationHeadless({ url: fileUrlOrPath, id })
+
+  // `positions` indices are stable across font/layout changes.
+  // Cache this result in your app; computing positions can be expensive.
+} catch (e: any) {
+  // Rejected with an error code listed below.
+  console.warn(e?.code, e?.message)
+}
+
+// Optional cancellation:
+// cancelHeadless(id)
+```
+
+**Input**
+
+- `url: string` – local `file://...` URL or absolute path (`/var/...`), same as `ReadiumView`.
+- `id?: string` – optional correlation id used for dedupe/cancellation. If omitted, native uses `url` as the key.
+- `mediaType?: string` – optional hint (native derives format from the asset).
+
+**Output**
+
+Returns the same shapes as `onPublicationReady`:
+
+- `metadata`
+- `tableOfContents`
+- `positions`
+- `readingOrder?` (nice-to-have)
+
+**Errors**
+
+- `E_PUBLICATION_OPEN_FAILED` – I/O or open error.
+- `E_DRM_NEEDS_USER_INTERACTION` – DRM/LCP requires passphrase or other user interaction; no UI prompt will be shown.
+- `E_UNSUPPORTED_FORMAT` – format not supported.
+- `E_CANCELLED` – cancelled via `cancelHeadless(id)`.
+
 
 #### View Props
 
