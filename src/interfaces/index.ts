@@ -6,4 +6,5 @@ export * from './Locator';
 export * from './Preferences';
 export * from './PublicationMetadata';
 export * from './PublicationReady';
+export * from './Headless';
 export * from './TapEvent';

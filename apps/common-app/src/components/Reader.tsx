@@ -15,6 +15,7 @@ import {
   navigateTo,
   clearHighlight as clearNativeHighlight,
   getVisibleTextRange,
+  openPublicationHeadless,
 } from '@tyukesz/react-native-readium';
 import type {
   Link,
@@ -100,7 +101,7 @@ export const Reader: React.FC<ReaderProps> = ({
       href,
       sentenceIndex: idx,
       style: {
-        tint: '#34f409',
+        tint: '#f4090d',
         isActive: false,
       },
     });
@@ -161,6 +162,9 @@ export const Reader: React.FC<ReaderProps> = ({
   const loadSentencePreview = useCallback(async () => {
     if (!isNative) return;
 
+    const result = await openPublicationHeadless({ url: file!.url });
+    console.log(result);
+
     try {
       setIsLoadingPreview(true);
       const res = await getVisibleTextRange(ref, {
@@ -169,10 +173,6 @@ export const Reader: React.FC<ReaderProps> = ({
       });
       console.log(res);
       setVisibleRange(res);
-      // const page = await getChapterSentences(ref, href);
-      // const text = page.join(' ');
-      // console.log({ textLength: text.length });
-      // setSentencePreview(page.items);
     } catch (e) {
       console.log('loadSentencePreview failed', e);
       setSentencePreview(null);
@@ -180,7 +180,7 @@ export const Reader: React.FC<ReaderProps> = ({
     } finally {
       setIsLoadingPreview(false);
     }
-  }, [isNative]);
+  }, [isNative, file]);
 
   const jumpToProgression = useCallback(async () => {
     const href = highlightHref.trim();

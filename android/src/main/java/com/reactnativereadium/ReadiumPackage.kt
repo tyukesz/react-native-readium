@@ -10,6 +10,7 @@ class ReadiumPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
             HighlightModule(reactContext),
+            HeadlessModule(reactContext),
             NavigationModule(reactContext),
             TextModule(reactContext)
         )
