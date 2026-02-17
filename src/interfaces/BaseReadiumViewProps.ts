@@ -10,6 +10,13 @@ export type BaseReadiumViewProps = {
   location?: Locator | Link;
   preferences?: string; // JSON between native and JS, which we deserialise later
   hidePageNumbers?: boolean;
+  /**
+   * Enable or disable tap navigation on screen edges (iOS only).
+   * Android uses swipe gestures for navigation and this prop has no effect.
+   * @default true
+   * @platform ios
+   */
+  enableTapNavigation?: boolean;
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
   onPublicationReady?: (event: PublicationReadyEvent) => void;

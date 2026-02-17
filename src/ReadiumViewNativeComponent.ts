@@ -19,6 +19,7 @@ export interface NativeProps extends ViewProps {
   file: File;
   preferences?: string;
   hidePageNumbers?: boolean;
+  enableTapNavigation?: boolean;
   onLocationChange?: DirectEventHandler<OnLocationChangeEvent>;
   onPublicationReady?: DirectEventHandler<OnPublicationReadyEvent>;
   onTap?: DirectEventHandler<OnTapEvent>;
