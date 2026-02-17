@@ -317,6 +317,12 @@ class ReadiumView : UIView, Loggable {
       updatePageNumberVisibility()
     }
   }
+  @objc var enableTapNavigation: Bool = true {
+    didSet {
+      readerViewController?.enableTapNavigation = enableTapNavigation
+    }
+  }
+
   @objc var onLocationChange: RCTDirectEventBlock?
   @objc var onPublicationReady: RCTDirectEventBlock?
   @objc var onTap: RCTDirectEventBlock?
@@ -634,6 +640,7 @@ class ReadiumView : UIView, Loggable {
     .store(in: &self.subscriptions)
 
     readerViewController = vc
+    readerViewController?.enableTapNavigation = enableTapNavigation
     readerViewController?.onTap = { [weak self] point in
       self?.onTap?([
         "x": point.x,

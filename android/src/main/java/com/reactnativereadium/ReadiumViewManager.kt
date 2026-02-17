@@ -127,6 +127,11 @@ class ReadiumViewManager(
     view.updatePageNumberVisibility(hidePageNumbers)
   }
 
+  @ReactProp(name = "enableTapNavigation", defaultBoolean = true)
+  fun setEnableTapNavigation(view: ReadiumView, enableTapNavigation: Boolean) {
+    // iOS only - no-op on Android
+  }
+
   @ReactPropGroup(names = ["width", "height"], customType = "Style")
   fun setStyle(view: ReadiumView?, index: Int, value: Int) {
     if (view != null) {

@@ -26,6 +26,14 @@ class ReaderViewController: UIViewController, Loggable {
   private var lastKnownLocator: Locator?
   private var navigatorInputObserverTokens = Set<InputObservableToken>()
   var onTap: ((CGPoint) -> Void)?
+  var enableTapNavigation: Bool = true {
+    didSet {
+      if enableTapNavigation != oldValue {
+        removeNavigatorInputObservers()
+        configureNavigatorInteractions()
+      }
+    }
+  }
 
   private lazy var tapGestureRecognizer: UITapGestureRecognizer = {
     let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleViewTap(_:)))
@@ -235,10 +243,12 @@ class ReaderViewController: UIViewController, Loggable {
       return
     }
 
-    DirectionalNavigationAdapter(
-      pointerPolicy: .init(edges: .all),
-      animatedTransition: true
-    ).bind(to: visualNavigator)
+    if enableTapNavigation {
+      DirectionalNavigationAdapter(
+        pointerPolicy: .init(edges: .all),
+        animatedTransition: true
+      ).bind(to: visualNavigator)
+    }
 
     let toggleToken = visualNavigator.addObserver(.tap { [weak self] event in
       guard
