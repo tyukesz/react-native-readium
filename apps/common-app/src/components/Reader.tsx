@@ -266,6 +266,7 @@ export const Reader: React.FC<ReaderProps> = ({
                   onTocChange(event.tableOfContents || []);
                 }
               }}
+              enableTapNavigation={false}
             />
           </View>
           {!isNative ? (
