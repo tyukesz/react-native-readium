@@ -270,9 +270,10 @@ import {
   - `highlightRange(viewRef, { href, startProgression, endProgression, style? })` — Best-effort highlight across a progression range.
   - `highlightSentence(viewRef, { href, sentenceIndex, style? })` — Highlight the given sentence index.
   - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
-  - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
+- `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
   - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
     - Each `items[]` entry is `{ index: number, text: string, locator?: Locator }`.
+    - If `limit` is omitted, returns all sentences (no default page size).
   - `getSentenceIndexFromProgression(viewRef, { href, progression })` — Promise<number> mapping a progression (0..1) into a sentence index.
   - `clearHighlight(viewRef)` — Removes any active highlight decorations.
 
