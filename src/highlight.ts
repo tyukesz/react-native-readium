@@ -240,11 +240,15 @@ export async function getChapterSentencePage(
     throw new Error('href is required');
   }
 
+  // If limit is omitted, return all sentences (no default page size).
+  // We use a large safe int since the native bridge expects an Int.
+  const nativeLimit = resolvedLimit == null ? 0x7fffffff : Number(resolvedLimit);
+
   return NativeHighlight.getChapterSentencePage(
     requireReactTag(viewRef),
     cleanHref,
     Number(resolvedOffset ?? 0),
-    Number(resolvedLimit ?? 50)
+    nativeLimit
   );
 }
 

@@ -1,5 +1,8 @@
 package com.reactnativereadium
 
+import android.os.Looper
+import android.util.Log
+import android.view.View
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -16,11 +19,41 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName(): String = NAME
 
+  companion object {
+    const val NAME = "HighlightModule"
+    private const val TAG = "HighlightModule"
+
+    private fun putStyleIfAny(target: JSONObject, style: ReadableMap) {
+      val out = JSONObject()
+      if (style.hasKey("tint") && style.getType("tint") == ReadableType.String) {
+        val tint = style.getString("tint")?.trim()
+        if (!tint.isNullOrEmpty()) {
+          out.put("tint", tint)
+        }
+      }
+      if (style.hasKey("isActive") && style.getType("isActive") == ReadableType.Boolean) {
+        out.put("isActive", style.getBoolean("isActive"))
+      }
+
+      if (out.length() > 0) {
+        target.put("style", out)
+      }
+    }
+  }
+
+  private inline fun runOnUiThread(activity: android.app.Activity, crossinline block: () -> Unit) {
+    if (Looper.getMainLooper().thread == Thread.currentThread()) {
+      block()
+    } else {
+      activity.runOnUiThread { block() }
+    }
+  }
+
   private inline fun withEpubReaderFragment(
     reactTag: Int,
     href: String,
     promise: Promise,
-    block: (fragment: EpubReaderFragment) -> Unit
+    crossinline block: (fragment: EpubReaderFragment) -> Unit
   ) {
     val activity = reactContext.currentActivity
     if (activity == null) {
@@ -32,19 +65,25 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView
+        if (view == null) {
+          promise.reject("not_found", "ReadiumView not found for reactTag")
+          return@runOnUiThread
+        }
 
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
+        val fragment = view.fragment as? EpubReaderFragment
+        if (fragment == null) {
+          promise.reject("not_ready", "Reader is not ready yet")
+          return@runOnUiThread
+        }
 
-    block(fragment)
+        block(fragment)
+      } catch (t: Throwable) {
+        promise.reject("highlight_error", t.message, t)
+      }
+    }
   }
 
   @ReactMethod
@@ -78,37 +117,48 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     val activity = reactContext.currentActivity ?: return
     if (href.isBlank()) return
 
-    val view = activity.findViewById<ReadiumView>(reactTag) ?: return
-    val fragment = view.fragment as? EpubReaderFragment
-
-    val json = JSONObject().apply {
+    val jsonString = JSONObject().apply {
       put("href", href)
       put("startProgression", startProgression)
       put("endProgression", endProgression)
       style?.let { putStyleIfAny(this, it) }
       put("requestId", System.currentTimeMillis().toString())
-    }
+    }.toString()
 
-    if (fragment == null) {
-      // Reader not ready yet; store for later.
-      view.updateHighlightRangeFromJsonString(json.toString())
-      return
-    }
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView ?: return@runOnUiThread
+        val fragment = view.fragment as? EpubReaderFragment
 
-    fragment.applyHighlightRangeFromJsonString(json.toString())
+        if (fragment == null) {
+          // Reader not ready yet; store for later.
+          view.updateHighlightRangeFromJsonString(jsonString)
+        } else {
+          fragment.applyHighlightRangeFromJsonString(jsonString)
+        }
+      } catch (t: Throwable) {
+        Log.w(TAG, "highlightRange failed: ${t.message}", t)
+      }
+    }
   }
 
   @ReactMethod
   fun clearHighlight(reactTag: Int) {
     val activity = reactContext.currentActivity ?: return
-    val view = activity.findViewById<ReadiumView>(reactTag) ?: return
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment != null) {
-      fragment.applyHighlightRangeFromJsonString(null)
-      fragment.applyHighlightSentenceFromJsonString(null)
-    } else {
-      view.updateHighlightRangeFromJsonString(null)
-      view.updateHighlightSentenceFromJsonString(null)
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView ?: return@runOnUiThread
+        val fragment = view.fragment as? EpubReaderFragment
+        if (fragment != null) {
+          fragment.applyHighlightRangeFromJsonString(null)
+          fragment.applyHighlightSentenceFromJsonString(null)
+        } else {
+          view.updateHighlightRangeFromJsonString(null)
+          view.updateHighlightSentenceFromJsonString(null)
+        }
+      } catch (t: Throwable) {
+        Log.w(TAG, "clearHighlight failed: ${t.message}", t)
+      }
     }
   }
 
@@ -140,23 +190,28 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     val activity = reactContext.currentActivity ?: return
     if (href.isBlank()) return
 
-    val view = activity.findViewById<ReadiumView>(reactTag) ?: return
-    val fragment = view.fragment as? EpubReaderFragment
-
-    val json = JSONObject().apply {
+    val jsonString = JSONObject().apply {
       put("href", href)
       put("sentenceIndex", sentenceIndex)
       style?.let { putStyleIfAny(this, it) }
       put("requestId", System.currentTimeMillis().toString())
-    }
+    }.toString()
 
-    if (fragment == null) {
-      // Reader not ready yet; store for later.
-      view.updateHighlightSentenceFromJsonString(json.toString())
-      return
-    }
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView ?: return@runOnUiThread
+        val fragment = view.fragment as? EpubReaderFragment
 
-    fragment.applyHighlightSentenceFromJsonString(json.toString())
+        if (fragment == null) {
+          // Reader not ready yet; store for later.
+          view.updateHighlightSentenceFromJsonString(jsonString)
+        } else {
+          fragment.applyHighlightSentenceFromJsonString(jsonString)
+        }
+      } catch (t: Throwable) {
+        Log.w(TAG, "highlightSentence failed: ${t.message}", t)
+      }
+    }
   }
 
   @ReactMethod
@@ -165,39 +220,20 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     href: String,
     promise: Promise
   ) {
-    val activity = reactContext.currentActivity
-    if (activity == null) {
-      promise.reject("no_activity", "Current activity is null")
-      return
-    }
-    if (href.isBlank()) {
-      promise.reject("invalid_args", "href is required")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
-
-    fragment.getChapterSentencesAsync(href,
-      onSuccess = { sentences ->
-        val arr = Arguments.createArray().apply {
-          sentences.forEach { pushString(it) }
+    withEpubReaderFragment(reactTag, href, promise) { fragment ->
+      fragment.getChapterSentencesAsync(
+        href,
+        onSuccess = { sentences ->
+          val arr = Arguments.createArray().apply {
+            sentences.forEach { pushString(it) }
+          }
+          promise.resolve(arr)
+        },
+        onError = { error ->
+          promise.reject("sentences_error", error.message, error)
         }
-        promise.resolve(arr)
-      },
-      onError = { error ->
-        promise.reject("sentences_error", error.message, error)
-      }
-    )
+      )
+    }
   }
 
   @ReactMethod
@@ -208,58 +244,38 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     limit: Int,
     promise: Promise
   ) {
-    val activity = reactContext.currentActivity
-    if (activity == null) {
-      promise.reject("no_activity", "Current activity is null")
-      return
-    }
-    if (href.isBlank()) {
-      promise.reject("invalid_args", "href is required")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
-      return
-    }
-
-    fragment.getChapterSentencePageAsync(
-      href,
-      offset,
-      limit,
-      onSuccess = { total, items ->
-        val payload = Arguments.createMap().apply {
-          putInt("total", total)
-          putArray(
-            "items",
-            Arguments.createArray().apply {
-              items.forEach { item ->
-                pushMap(
-                  Arguments.createMap().apply {
-                    putInt("index", item.index)
-                    putString("text", item.text)
-                    if (item.locator != null) {
-                      putMap("locator", item.locator.toWritableMap())
+    withEpubReaderFragment(reactTag, href, promise) { fragment ->
+      fragment.getChapterSentencePageAsync(
+        href,
+        offset,
+        limit,
+        onSuccess = { total, items ->
+          val payload = Arguments.createMap().apply {
+            putInt("total", total)
+            putArray(
+              "items",
+              Arguments.createArray().apply {
+                items.forEach { item ->
+                  pushMap(
+                    Arguments.createMap().apply {
+                      putInt("index", item.index)
+                      putString("text", item.text)
+                      if (item.locator != null) {
+                        putMap("locator", item.locator.toWritableMap())
+                      }
                     }
-                  }
-                )
+                  )
+                }
               }
-            }
-          )
+            )
+          }
+          promise.resolve(payload)
+        },
+        onError = { error ->
+          promise.reject("sentences_error", error.message, error)
         }
-        promise.resolve(payload)
-      },
-      onError = { error ->
-        promise.reject("sentences_error", error.message, error)
-      }
-    )
+      )
+    }
   }
 
   @ReactMethod
@@ -357,27 +373,6 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
       promise.resolve(null)
     } catch (e: Exception) {
       promise.reject("highlight_error", e.message, e)
-    }
-  }
-
-  companion object {
-    const val NAME = "HighlightModule"
-
-    private fun putStyleIfAny(target: JSONObject, style: ReadableMap) {
-      val out = JSONObject()
-      if (style.hasKey("tint") && style.getType("tint") == ReadableType.String) {
-        val tint = style.getString("tint")?.trim()
-        if (!tint.isNullOrEmpty()) {
-          out.put("tint", tint)
-        }
-      }
-      if (style.hasKey("isActive") && style.getType("isActive") == ReadableType.Boolean) {
-        out.put("isActive", style.getBoolean("isActive"))
-      }
-
-      if (out.length() > 0) {
-        target.put("style", out)
-      }
     }
   }
 }
