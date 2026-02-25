@@ -69,6 +69,12 @@ type NativeHighlightModule = {
     endProgression: number,
     style: HighlightStyle
   ) => void;
+  highlightLocator?: (reactTag: number, locator: Locator) => void;
+  highlightLocatorWithStyle?: (
+    reactTag: number,
+    locator: Locator,
+    style: HighlightStyle
+  ) => void;
   highlightSentence?: (
     reactTag: number,
     href: string,
@@ -183,6 +189,43 @@ export function clearHighlight(viewRef: RefObject<any> | any): void {
   }
 
   NativeHighlight.clearHighlight(requireReactTag(viewRef));
+}
+
+export function highlightLocator(
+  viewRef: RefObject<any> | any,
+  locator: Locator,
+  style?: HighlightStyle
+): void {
+  if (Platform.OS === 'web') {
+    throw new Error('Highlighting is not implemented on web yet');
+  }
+
+  if (!NativeHighlight?.highlightLocator) {
+    throw new Error('Native HighlightModule.highlightLocator is not available');
+  }
+
+  const href = (locator as any)?.href?.trim?.() ?? '';
+  if (!href) {
+    throw new Error('locator.href is required');
+  }
+
+  validateHighlightStyle(style);
+  if (style && NativeHighlight.highlightLocatorWithStyle) {
+    NativeHighlight.highlightLocatorWithStyle(
+      requireReactTag(viewRef),
+      locator,
+      style
+    );
+    return;
+  }
+
+  if (style && !NativeHighlight.highlightLocatorWithStyle) {
+    console.warn(
+      '[react-native-readium] highlightLocator: native highlightLocatorWithStyle is not available; falling back to default highlight style.'
+    );
+  }
+
+  NativeHighlight.highlightLocator(requireReactTag(viewRef), locator);
 }
 
 export async function getChapterSentences(

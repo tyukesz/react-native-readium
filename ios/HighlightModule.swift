@@ -111,6 +111,27 @@ class HighlightModule: NSObject, RCTBridgeModule {
     }
   }
 
+  @objc(highlightLocator:location:)
+  func highlightLocator(
+    _ reactTag: NSNumber,
+    location: NSDictionary
+  ) {
+    withReadiumView(reactTag) { view in
+      view.highlightLocator(location: location)
+    }
+  }
+
+  @objc(highlightLocatorWithStyle:location:style:)
+  func highlightLocatorWithStyle(
+    _ reactTag: NSNumber,
+    location: NSDictionary,
+    style: NSDictionary
+  ) {
+    withReadiumView(reactTag) { view in
+      view.highlightLocatorWithStyle(location: location, style: style)
+    }
+  }
+
   @objc(getChapterSentencePage:href:offset:limit:resolver:rejecter:)
   func getChapterSentencePage(
     _ reactTag: NSNumber,

@@ -24,6 +24,13 @@ RCT_EXTERN_METHOD(highlightSentenceWithStyle:(nonnull NSNumber *)reactTag
                   sentenceIndex:(nonnull NSNumber *)sentenceIndex
                   style:(nonnull NSDictionary *)style)
 
+RCT_EXTERN_METHOD(highlightLocator:(nonnull NSNumber *)reactTag
+                  location:(nonnull NSDictionary *)location)
+
+RCT_EXTERN_METHOD(highlightLocatorWithStyle:(nonnull NSNumber *)reactTag
+                  location:(nonnull NSDictionary *)location
+                  style:(nonnull NSDictionary *)style)
+
 RCT_EXTERN_METHOD(getChapterSentencePage:(nonnull NSNumber *)reactTag
                   href:(nonnull NSString *)href
                   offset:(nonnull NSNumber *)offset

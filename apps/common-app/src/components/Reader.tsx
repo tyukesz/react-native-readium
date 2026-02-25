@@ -11,6 +11,7 @@ import {
   ReadiumView,
   getChapterSentencePage,
   getSentenceIndexFromProgression,
+  highlightLocator,
   highlightSentence,
   navigateTo,
   clearHighlight as clearNativeHighlight,
@@ -127,6 +128,41 @@ export const Reader: React.FC<ReaderProps> = ({
         console.log('navigateTo failed', e);
       }
     }
+    setIsHighlightModalVisible(false);
+  };
+
+  const applyHighlightLocator = async () => {
+    const href = highlightHref.trim();
+    if (!href) return;
+
+    const idx = Number(sentenceIndexText);
+    if (!Number.isInteger(idx) || idx < 0) return;
+
+    if (!isNative) return;
+
+    try {
+      const page = await getChapterSentencePage(ref, {
+        href,
+        offset: idx,
+        limit: 1,
+      });
+      const item = page.items?.[0];
+      if (!item?.locator) {
+        throw new Error('Failed to resolve locator for sentence');
+      }
+
+      console.log('highlightLocator', item.locator);
+
+      highlightLocator(ref, item.locator, {
+        tint: '#0953f4',
+        isActive: false,
+      });
+
+      await navigateTo(ref, item.locator);
+    } catch (e) {
+      console.log('highlightLocator failed', e);
+    }
+
     setIsHighlightModalVisible(false);
   };
 
@@ -291,6 +327,7 @@ export const Reader: React.FC<ReaderProps> = ({
           sentencePreview={sentencePreview}
           onClose={() => setIsHighlightModalVisible(false)}
           onApply={applyHighlight}
+          onApplyLocator={applyHighlightLocator}
           onClear={clearHighlightAction}
           onChangeHighlightHref={setHighlightHref}
           onChangeSentenceIndexText={setSentenceIndexText}
