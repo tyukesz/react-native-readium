@@ -34,7 +34,9 @@ class TextModule: NSObject, RCTBridgeModule {
 
       let includeText: Bool = (options?["includeText"] as? Bool) ?? true
       let maxTextLength: Int? = (options?["maxTextLength"] as? NSNumber)?.intValue
-      let source: String? = (options?["source"] as? String)
+      let sourceRaw: String? = (options?["source"] as? String)
+      let sourceNorm = sourceRaw?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+      let source: String = (sourceNorm == "approx") ? "approx" : "viewport"
 
       Task { @MainActor in
         do {

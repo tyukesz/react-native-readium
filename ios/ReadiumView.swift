@@ -476,6 +476,28 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
+  @objc func highlightLocator(location: NSDictionary) {
+    highlightLocatorWithStyle(location: location, style: nil)
+  }
+
+  @objc func highlightLocatorWithStyle(location: NSDictionary, style: NSDictionary?) {
+    Task { @MainActor [weak self] in
+      guard let self = self else { return }
+      guard let navigator = self.readerViewController?.navigator else { return }
+      _ = navigator // Silence unused warning; we only gate on readiness here.
+
+      guard let locator = await ReaderService.locatorFromLocation(
+        location,
+        readerViewController?.publication
+      ) else {
+        return
+      }
+
+      self.clearHighlight()
+      self.applyHighlightDecoration(locator: locator, style: style)
+    }
+  }
+
   func getChapterSentencePage(
     href: String,
     offset: Int,

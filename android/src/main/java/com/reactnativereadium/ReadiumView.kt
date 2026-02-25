@@ -40,6 +40,7 @@ class ReadiumView(
   var lateInitSerializedUserPreferences: String? = null
   var lateInitHighlightRangeJson: String? = null
   var lateInitHighlightSentenceJson: String? = null
+  var lateInitHighlightLocatorJson: String? = null
   var hidePageNumbers: Boolean = false
   private var pendingLocation: LinkOrLocator? = null
   private var frameCallback: Choreographer.FrameCallback? = null
@@ -116,6 +117,11 @@ class ReadiumView(
     (fragment as? EpubReaderFragment)?.applyHighlightSentenceFromJsonString(highlightSentence)
   }
 
+  fun updateHighlightLocatorFromJsonString(highlightLocator: String?) {
+    lateInitHighlightLocatorJson = highlightLocator
+    (fragment as? EpubReaderFragment)?.applyHighlightLocatorFromJsonString(highlightLocator)
+  }
+
   fun addFragment(frag: BaseReaderFragment) {
     if (isFragmentAdded) {
       return
@@ -128,6 +134,7 @@ class ReadiumView(
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
     lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
     lateInitHighlightSentenceJson?.let { updateHighlightSentenceFromJsonString(it) }
+    lateInitHighlightLocatorJson?.let { updateHighlightLocatorFromJsonString(it) }
     val activity = reactContext.currentActivity as? FragmentActivity
     if (activity == null) {
       Log.w(TAG, "Current activity is not a FragmentActivity; cannot add fragment")
@@ -273,4 +280,3 @@ class ReadiumView(
     }
   }
 }
-

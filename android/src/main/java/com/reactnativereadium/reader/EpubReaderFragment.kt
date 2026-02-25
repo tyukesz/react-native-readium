@@ -49,6 +49,7 @@ class EpubReaderFragment : VisualReaderFragment() {
     private var initialPreferencesJsonString: String? = null
     private var initialHighlightRangeJsonString: String? = null
     private var initialHighlightSentenceJsonString: String? = null
+    private var initialHighlightLocatorJsonString: String? = null
 
     private lateinit var userPreferences: EpubPreferences
     private lateinit var sentenceIndexProvider: SentenceIndexProvider
@@ -77,6 +78,11 @@ class EpubReaderFragment : VisualReaderFragment() {
     private fun applyPendingHighlightSentenceIfNeeded() {
       if (!this::navigator.isInitialized) return
       initialHighlightSentenceJsonString?.let { applyHighlightSentenceFromJsonString(it) }
+    }
+
+    private fun applyPendingHighlightLocatorIfNeeded() {
+      if (!this::navigator.isInitialized) return
+      initialHighlightLocatorJsonString?.let { applyHighlightLocatorFromJsonString(it) }
     }
 
     fun initFactory(
@@ -177,6 +183,51 @@ class EpubReaderFragment : VisualReaderFragment() {
           decorable.applyDecorations(result.decorations, HIGHLIGHT_GROUP)
         }
       }
+    }
+
+    fun applyHighlightLocatorFromJsonString(highlightLocatorJson: String?) {
+      if (highlightLocatorJson.isNullOrBlank()) {
+        if (this::navigator.isInitialized) {
+          val decorable = navigator as? DecorableNavigator
+          if (decorable != null) {
+            viewLifecycleOwner.lifecycleScope.launch {
+              decorable.applyDecorations(emptyList(), HIGHLIGHT_GROUP)
+            }
+          }
+        }
+        initialHighlightLocatorJsonString = null
+        return
+      }
+
+      if (!this::navigator.isInitialized) {
+        initialHighlightLocatorJsonString = highlightLocatorJson
+        return
+      }
+
+      val decorable = navigator as? DecorableNavigator
+      if (decorable == null) {
+        initialHighlightLocatorJsonString = null
+        return
+      }
+
+      initialHighlightLocatorJsonString = highlightLocatorJson
+
+      viewLifecycleOwner.lifecycleScope.launch {
+        val decorations = buildDecorationsFromLocator(highlightLocatorJson)
+        decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
+      }
+    }
+
+    private fun buildDecorationsFromLocator(jsonString: String): List<Decoration> {
+      val json = runCatching { JSONObject(jsonString) }.getOrNull() ?: return emptyList()
+      val locatorJson = json.optJSONObject("locator") ?: return emptyList()
+      val locator = Locator.fromJSON(locatorJson) ?: return emptyList()
+
+      val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
+      val style = Decoration.Style.Highlight(highlightStyle.tint, highlightStyle.isActive)
+      return listOf(
+        Decoration("${HIGHLIGHT_ID_PREFIX}locator", locator, style, emptyMap<String, Any>())
+      )
     }
 
     private suspend fun buildDecorationsFromProgressionRange(jsonString: String): List<Decoration> {
@@ -778,6 +829,7 @@ class EpubReaderFragment : VisualReaderFragment() {
         applyPendingPreferencesIfNeeded()
         applyPendingHighlightRangeIfNeeded()
         applyPendingHighlightSentenceIfNeeded()
+        applyPendingHighlightLocatorIfNeeded()
 
         return view
     }

@@ -1,5 +1,7 @@
 package com.reactnativereadium
 
+import android.os.Looper
+import android.view.View
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -13,6 +15,14 @@ class TextModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName(): String = NAME
 
+  private inline fun runOnUiThread(activity: android.app.Activity, crossinline block: () -> Unit) {
+    if (Looper.getMainLooper().thread == Thread.currentThread()) {
+      block()
+    } else {
+      activity.runOnUiThread { block() }
+    }
+  }
+
   @ReactMethod
   fun getVisibleTextRange(
     reactTag: Int,
@@ -22,18 +32,6 @@ class TextModule(private val reactContext: ReactApplicationContext) :
     val activity = reactContext.currentActivity
     if (activity == null) {
       promise.reject("no_activity", "Current activity is null")
-      return
-    }
-
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
-    val fragment = view.fragment as? EpubReaderFragment
-    if (fragment == null) {
-      promise.reject("not_ready", "Reader is not ready yet")
       return
     }
 
@@ -47,19 +45,43 @@ class TextModule(private val reactContext: ReactApplicationContext) :
 
     val source = options?.hasKey("source")?.let { has ->
       if (!has) null else options.getString("source")
+    }?.trim()?.lowercase()
+    val resolvedSource = when (source) {
+      null, "" -> "viewport"
+      "viewport" -> "viewport"
+      "approx" -> "approx"
+      else -> "viewport"
     }
 
-    fragment.getVisibleTextRangeAsync(
-      includeText = includeText,
-      maxTextLength = maxTextLength,
-      source = source,
-      onSuccess = { payload ->
-        promise.resolve(payload)
-      },
-      onError = { error ->
-        promise.reject("visible_text_error", error.message, error)
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView
+        if (view == null) {
+          promise.reject("not_found", "ReadiumView not found for reactTag")
+          return@runOnUiThread
+        }
+
+        val fragment = view.fragment as? EpubReaderFragment
+        if (fragment == null) {
+          promise.reject("not_ready", "Reader is not ready yet")
+          return@runOnUiThread
+        }
+
+        fragment.getVisibleTextRangeAsync(
+          includeText = includeText,
+          maxTextLength = maxTextLength,
+          source = resolvedSource,
+          onSuccess = { payload ->
+            promise.resolve(payload)
+          },
+          onError = { error ->
+            promise.reject("visible_text_error", error.message, error)
+          }
+        )
+      } catch (t: Throwable) {
+        promise.reject("visible_text_error", t.message, t)
       }
-    )
+    }
   }
 
   companion object {
