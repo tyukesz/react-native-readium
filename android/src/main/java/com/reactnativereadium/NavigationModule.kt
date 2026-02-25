@@ -1,5 +1,7 @@
 package com.reactnativereadium
 
+import android.os.Looper
+import android.view.View
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
@@ -15,6 +17,14 @@ class NavigationModule(private val reactContext: ReactApplicationContext) :
 
   override fun getName(): String = NAME
 
+  private inline fun runOnUiThread(activity: android.app.Activity, crossinline block: () -> Unit) {
+    if (Looper.getMainLooper().thread == Thread.currentThread()) {
+      block()
+    } else {
+      activity.runOnUiThread { block() }
+    }
+  }
+
   @ReactMethod
   fun navigateTo(
     reactTag: Int,
@@ -27,21 +37,27 @@ class NavigationModule(private val reactContext: ReactApplicationContext) :
       return
     }
 
-    val view = activity.findViewById<ReadiumView>(reactTag)
-    if (view == null) {
-      promise.reject("not_found", "ReadiumView not found for reactTag")
-      return
-    }
-
     val linkOrLocator = locationToLinkOrLocator(location)
     if (linkOrLocator == null) {
       promise.reject("invalid_location", "Invalid location")
       return
     }
 
-    // Returns true if navigation executed immediately, false if queued (e.g. screen transition).
-    val ok = view.updateLocation(linkOrLocator)
-    promise.resolve(ok)
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView
+        if (view == null) {
+          promise.reject("not_found", "ReadiumView not found for reactTag")
+          return@runOnUiThread
+        }
+
+        // Returns true if navigation executed immediately, false if queued (e.g. screen transition).
+        val ok = view.updateLocation(linkOrLocator)
+        promise.resolve(ok)
+      } catch (t: Throwable) {
+        promise.reject("navigate_error", t.message, t)
+      }
+    }
   }
 
   private fun locationToLinkOrLocator(location: ReadableMap): LinkOrLocator? {
