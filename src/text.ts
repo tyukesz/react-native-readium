@@ -25,6 +25,7 @@ export type GetVisibleTextRangeOptions = {
    * "approx" uses sentence/segment indices; "viewport" queries the rendered WebView DOM.
    * When "viewport", start/end/totalChars are based on DOM text order.
    * Returned `text` is JS-friendly: `\r`, `\n`, and `\t` are replaced with spaces.
+   * @default "viewport"
    */
   source?: 'approx' | 'viewport';
 };

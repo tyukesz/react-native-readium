@@ -34,6 +34,7 @@ interface HighlightModalProps {
   sentencePreview: SentencePreviewItem[] | null;
   onClose: () => void;
   onApply: () => void;
+  onApplyLocator: () => void;
   onClear: () => void;
   onChangeHighlightHref: (value: string) => void;
   onChangeSentenceIndexText: (value: string) => void;
@@ -57,6 +58,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
   sentencePreview,
   onClose,
   onApply,
+  onApplyLocator,
   onClear,
   onChangeHighlightHref,
   onChangeSentenceIndexText,
@@ -176,7 +178,10 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
               onPress={onApply}
               style={[styles.modalButton, styles.modalButtonPrimary]}
             >
-              <Text style={styles.modalPrimaryButtonText}>Highlight</Text>
+              <Text style={styles.modalPrimaryButtonText}>Highlight (Index)</Text>
+            </Pressable>
+            <Pressable onPress={onApplyLocator} style={styles.modalButton}>
+              <Text style={styles.actionButtonText}>Highlight (Locator)</Text>
             </Pressable>
           </View>
         </View>
@@ -236,6 +241,7 @@ const styles = StyleSheet.create({
   modalRow: {
     flexDirection: 'row',
     justifyContent: 'flex-end',
+    flexWrap: 'wrap',
     gap: 10,
     marginTop: 14,
   },

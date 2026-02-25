@@ -152,9 +152,11 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
         if (fragment != null) {
           fragment.applyHighlightRangeFromJsonString(null)
           fragment.applyHighlightSentenceFromJsonString(null)
+          fragment.applyHighlightLocatorFromJsonString(null)
         } else {
           view.updateHighlightRangeFromJsonString(null)
           view.updateHighlightSentenceFromJsonString(null)
+          view.updateHighlightLocatorFromJsonString(null)
         }
       } catch (t: Throwable) {
         Log.w(TAG, "clearHighlight failed: ${t.message}", t)
@@ -179,6 +181,23 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     style: ReadableMap?
   ) {
     highlightSentenceInternal(reactTag, href, sentenceIndex, style)
+  }
+
+  @ReactMethod
+  fun highlightLocator(
+    reactTag: Int,
+    locator: ReadableMap
+  ) {
+    highlightLocatorInternal(reactTag, locator, null)
+  }
+
+  @ReactMethod
+  fun highlightLocatorWithStyle(
+    reactTag: Int,
+    locator: ReadableMap,
+    style: ReadableMap?
+  ) {
+    highlightLocatorInternal(reactTag, locator, style)
   }
 
   private fun highlightSentenceInternal(
@@ -210,6 +229,43 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
         }
       } catch (t: Throwable) {
         Log.w(TAG, "highlightSentence failed: ${t.message}", t)
+      }
+    }
+  }
+
+  private fun highlightLocatorInternal(
+    reactTag: Int,
+    locator: ReadableMap,
+    style: ReadableMap?
+  ) {
+    val activity = reactContext.currentActivity ?: return
+
+    val locatorJson = try {
+      JSONObject(locator.toHashMap())
+    } catch (t: Throwable) {
+      Log.w(TAG, "Invalid locator: ${t.message}", t)
+      return
+    }
+
+    val jsonString = JSONObject().apply {
+      put("locator", locatorJson)
+      style?.let { putStyleIfAny(this, it) }
+      put("requestId", System.currentTimeMillis().toString())
+    }.toString()
+
+    runOnUiThread(activity) {
+      try {
+        val view = activity.findViewById<View>(reactTag) as? ReadiumView ?: return@runOnUiThread
+        val fragment = view.fragment as? EpubReaderFragment
+
+        if (fragment == null) {
+          // Reader not ready yet; store for later.
+          view.updateHighlightLocatorFromJsonString(jsonString)
+        } else {
+          fragment.applyHighlightLocatorFromJsonString(jsonString)
+        }
+      } catch (t: Throwable) {
+        Log.w(TAG, "highlightLocator failed: ${t.message}", t)
       }
     }
   }

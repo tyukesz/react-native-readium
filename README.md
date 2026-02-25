@@ -248,6 +248,7 @@ Quick reference for the sentence-extraction and highlighting primitives exported
 ```ts
 import {
   highlightRange,
+  highlightLocator,
   highlightSentence,
   highlightSentenceFromProgression,
   navigateTo,
@@ -268,9 +269,10 @@ import {
 
 - Functions & behavior (short):
   - `highlightRange(viewRef, { href, startProgression, endProgression, style? })` — Best-effort highlight across a progression range.
+  - `highlightLocator(viewRef, locator, style?)` — Highlight a specific Readium `Locator` (typically one returned by native APIs).
   - `highlightSentence(viewRef, { href, sentenceIndex, style? })` — Highlight the given sentence index.
   - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
-- `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
+  - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
   - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
     - Each `items[]` entry is `{ index: number, text: string, locator?: Locator }`.
     - If `limit` is omitted, returns all sentences (no default page size).
@@ -288,6 +290,12 @@ highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endPr
 
 // Highlight sentence nearest to progression and get its index
 const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
+
+// Highlight a specific locator (e.g. one returned by getChapterSentencePage)
+const page2 = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 1 })
+if (page2.items[0]?.locator) {
+  highlightLocator(ref, page2.items[0].locator, { tint: '#00FF00', isActive: true })
+}
 
 // Navigate explicitly (e.g. after a highlight, or for Table of Contents)
 await navigateTo(ref, {
@@ -333,7 +341,7 @@ import { getVisibleTextRange } from '@tyukesz/react-native-readium'
   - Options:
     - `includeText?: boolean` (default `true`)
     - `maxTextLength?: number` (optional)
-    - `source?: 'approx' | 'viewport'`
+    - `source?: 'approx' | 'viewport'` (default `viewport`)
       - `viewport`: queries the rendered WebView DOM and returns the visible substring.
       - `approx`: uses sentence/segment indices (fast, stable; may be less precise than `viewport`).
 
