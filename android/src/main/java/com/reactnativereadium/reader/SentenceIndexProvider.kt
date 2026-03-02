@@ -17,6 +17,19 @@ class SentenceIndexProvider(
 ) {
   private val cache = SentenceIndexCache()
 
+  private fun isEffectivelyBlank(text: String): Boolean {
+    if (text.isEmpty()) return true
+    // EPUBs often contain NBSP/zero-width characters which look blank in UI.
+    val stripped = text
+      .replace("\u00A0", "")
+      .replace("\u200B", "")
+      .replace("\u200C", "")
+      .replace("\u200D", "")
+      .replace("\uFEFF", "")
+      .trim()
+    return stripped.isEmpty()
+  }
+
   fun clearCache() {
     cache.clear()
   }
@@ -29,6 +42,7 @@ class SentenceIndexProvider(
     val segmentOffsets = buildSegmentOffsets(segments)
     val tocTitle = findTocTitleForHref(href)
     val spans = splitLeadingTitleIfMerged(combined, splitSentencesWithSpans(combined), tocTitle)
+      .filter { !isEffectivelyBlank(it.text) }
 
     val positionBoundaries = positionResolverProvider().progressionsForHref(href)
 
@@ -48,15 +62,9 @@ class SentenceIndexProvider(
       } else {
         0.0
       }
-      // Segment locators can span across multiple pages, in which case `segment.locator.locations.progression`
-      // is too coarse (many sentences get pinned to the segment start progression and navigation lands
-      // one page early). Prefer a monotonic, per-sentence estimate based on the sentence's character offset.
-      val segmentProgression = findSegmentProgressionForOffset(segmentOffsets, span.start)
-      val sourceProgression = if (segmentProgression != null) {
-        maxOf(charProgression, segmentProgression)
-      } else {
-        charProgression
-      }
+      // Per-sentence source progression must be monotonic and must NOT be snapped to the
+      // segment/block locator progression (too coarse for sentence-level navigation).
+      val sourceProgression = charProgression
       val boundaryIndex = if (positionBoundaries.isEmpty()) 0 else positionResolverProvider()
         .boundaryIndexForProgression(href, sourceProgression)
       SentenceDraft(

@@ -333,12 +333,17 @@ final class SentenceIndexStore {
     normalizedHrefForComparison: (String) -> String,
     positionsByHref: [String: [Double]]
   ) -> [SentenceEntry] {
-    let totalChars = raw.reduce(0) { $0 + $1.text.count }
+    // Filter out empty items defensively (can happen with some tokenizers/edge punctuation).
+    // Also treat NBSP/zero-width-only strings as empty, since they show up as "blank" in UI
+    // but are not removed by `.whitespacesAndNewlines`.
+    let cleaned = raw.filter { !isEffectivelyEmptySentenceText($0.text) }
+
+    let totalChars = cleaned.reduce(0) { $0 + $1.text.count }
     if totalChars <= 0 {
       return []
     }
 
-    let hrefKey = raw.first.map { normalizedHrefForComparison($0.locator.href.url.relativeString) } ?? ""
+    let hrefKey = cleaned.first.map { normalizedHrefForComparison($0.locator.href.url.relativeString) } ?? ""
     let positionBoundaries = positionsByHref[hrefKey] ?? []
 
     func findBoundaryIndex(_ p: Double) -> Int {
@@ -365,17 +370,15 @@ final class SentenceIndexStore {
 
     var offset = 0
     var drafts: [Draft] = []
-    drafts.reserveCapacity(raw.count)
-    for (idx, item) in raw.enumerated() {
+    drafts.reserveCapacity(cleaned.count)
+    for (idx, item) in cleaned.enumerated() {
       let start = offset
       let len = item.text.count
       let end = start + len
+      // Per-sentence source progression must be monotonic and *not* snapped to the segment/block
+      // locator progression, which can pin many consecutive sentences to the same page.
       let charProgression = Double(start) / Double(totalChars)
-      // Segment locators are often anchored at the start of a block (eg. paragraph) which may span
-      // multiple pages; using that progression can pin later sentences to an earlier page.
-      // Use a monotonic estimate based on the sentence's character offset.
-      let locatorProgression = item.locator.locations.progression ?? 0.0
-      let sourceProgression = max(charProgression, locatorProgression)
+      let sourceProgression = min(max(charProgression, 0.0), 1.0)
       let boundaryIndex = positionBoundaries.isEmpty ? 0 : findBoundaryIndex(sourceProgression)
       drafts.append(
         Draft(
@@ -412,5 +415,14 @@ final class SentenceIndexStore {
     }
 
     return out
+  }
+
+  private func isEffectivelyEmptySentenceText(_ text: String) -> Bool {
+    if text.isEmpty { return true }
+    // Common invisible characters in EPUBs.
+    // NBSP and zero-width code points are frequently used and appear as empty in UI.
+    var trimSet = CharacterSet.whitespacesAndNewlines
+    trimSet.insert(charactersIn: "\u{00A0}\u{200B}\u{200C}\u{200D}\u{FEFF}")
+    return text.trimmingCharacters(in: trimSet).isEmpty
   }
 }

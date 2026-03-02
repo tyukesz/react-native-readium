@@ -23,6 +23,18 @@ export const useEpubFile = ({
   useEffect(() => {
     let isMounted = true;
 
+    async function isValidLocalFile(path: string) {
+      const exists = await RNFS.exists(path);
+      if (!exists) return false;
+      try {
+        const stat = await RNFS.stat(path);
+        // Defensive: a previous failed copy can leave a 0-byte file behind.
+        return Number(stat?.size ?? 0) > 0;
+      } catch {
+        return false;
+      }
+    }
+
     async function run() {
       setIsLoading(true);
       let url = epubUrl;
@@ -33,8 +45,18 @@ export const useEpubFile = ({
       const bundledLocalPath = `${RNFS.DocumentDirectoryPath}/ferfi.epub`;
 
       if (useFerfiEpub) {
-        const exists = await RNFS.exists(bundledLocalPath);
-        if (!exists) {
+        const valid = await isValidLocalFile(bundledLocalPath);
+        if (!valid) {
+          // Remove any stale/empty file before copying.
+          const exists = await RNFS.exists(bundledLocalPath);
+          if (exists) {
+            try {
+              await RNFS.unlink(bundledLocalPath);
+            } catch {
+              // ignore
+            }
+          }
+
           if (Platform.OS === 'android') {
             const copyFileAssets = (RNFS as any).copyFileAssets as
               | ((
@@ -50,12 +72,26 @@ export const useEpubFile = ({
             await copyFileAssets('ferfi.epub', bundledLocalPath);
           } else if (Platform.OS === 'ios') {
             const sourcePath = `${RNFS.MainBundlePath}/ferfi.epub`;
+            const sourceExists = await RNFS.exists(sourcePath);
+            if (!sourceExists) {
+              throw new Error(
+                `Bundled ferfi.epub is missing in iOS app bundle (expected at: ${sourcePath}). ` +
+                  'Add ferfi.epub to the Xcode target “Copy Bundle Resources”.'
+              );
+            }
             await RNFS.copyFile(sourcePath, bundledLocalPath);
           } else {
-            throw new Error('Bundled ferfi.epub is not supported on this platform');
+            throw new Error(
+              'Bundled ferfi.epub is not supported on this platform'
+            );
           }
-        } else {
-          console.log('Local ferfi.epub already exists. Skipping copy.');
+        }
+
+        const afterCopyValid = await isValidLocalFile(bundledLocalPath);
+        if (!afterCopyValid) {
+          throw new Error(
+            `Failed to provision local ferfi.epub at: ${bundledLocalPath}`
+          );
         }
 
         url = bundledLocalPath;

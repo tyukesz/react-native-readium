@@ -16,6 +16,7 @@ import androidx.lifecycle.lifecycleScope
 import com.reactnativereadium.R
 import com.reactnativereadium.utils.LinkOrLocator
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
@@ -54,6 +55,39 @@ class EpubReaderFragment : VisualReaderFragment() {
     private lateinit var userPreferences: EpubPreferences
     private lateinit var sentenceIndexProvider: SentenceIndexProvider
     private var latestSentenceRequestId: String? = null
+
+    private fun sanitizeLocatorJsonForTextQuoteAnchoring(locatorJson: JSONObject) {
+      val highlight = locatorJson.optJSONObject("text")?.optString("highlight")
+      if (highlight.isNullOrBlank()) return
+
+      val locations = locatorJson.optJSONObject("locations") ?: return
+      val cssSelector = locations.optString("cssSelector")
+      if (cssSelector.isBlank()) return
+
+      // If we have TextQuote, avoid brittle positional selectors which might not match
+      // the runtime/paginated DOM. Let Readium anchor by TextQuote only.
+      if (cssSelector.contains(":nth-child(") || cssSelector.contains(":nth-of-type(")) {
+        locations.remove("cssSelector")
+      }
+    }
+
+    private fun rewriteLocatorForSentence(
+      base: Locator,
+      hrefKey: String,
+      progression: Double,
+      resolver: PublicationPositionResolver,
+    ): Locator {
+      val p = progression.coerceIn(0.0, 1.0)
+      val json = base.toJSON()
+      val locations = (json.optJSONObject("locations") ?: JSONObject().also { json.put("locations", it) })
+
+      locations.put("progression", p)
+      resolver.resolvePositionFromProgression(hrefKey, p)?.let { locations.put("position", it) }
+      resolver.resolveTotalProgressionFromProgression(hrefKey, p)?.let { locations.put("totalProgression", it) }
+
+      sanitizeLocatorJsonForTextQuoteAnchoring(json)
+      return Locator.fromJSON(json) ?: base
+    }
 
     // Accessibility
     private var isExploreByTouchEnabled = false
@@ -215,12 +249,21 @@ class EpubReaderFragment : VisualReaderFragment() {
       viewLifecycleOwner.lifecycleScope.launch {
         val decorations = buildDecorationsFromLocator(highlightLocatorJson)
         decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
+
+        // Best-effort retry: navigateTo() resolution doesn't guarantee the paginated DOM is ready.
+        // Re-applying after a short delay helps make highlights visible on slow renders.
+        delay(150)
+        if (initialHighlightLocatorJsonString == highlightLocatorJson) {
+          decorable.applyDecorations(decorations, HIGHLIGHT_GROUP)
+        }
       }
     }
 
     private fun buildDecorationsFromLocator(jsonString: String): List<Decoration> {
       val json = runCatching { JSONObject(jsonString) }.getOrNull() ?: return emptyList()
       val locatorJson = json.optJSONObject("locator") ?: return emptyList()
+
+      sanitizeLocatorJsonForTextQuoteAnchoring(locatorJson)
       val locator = Locator.fromJSON(locatorJson) ?: return emptyList()
 
       val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
@@ -234,6 +277,8 @@ class EpubReaderFragment : VisualReaderFragment() {
       val json = runCatching { JSONObject(jsonString) }.getOrNull() ?: return emptyList()
       val href = json.optString("href")
       if (href.isBlank()) return emptyList()
+
+      val hrefKey = normalizedHrefForComparison(href)
 
       val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
 
@@ -253,7 +298,7 @@ class EpubReaderFragment : VisualReaderFragment() {
 
       val hrefStartLocator = Locator.fromJSON(
         JSONObject().apply {
-          put("href", href)
+          put("href", hrefKey)
           put("type", "application/xhtml+xml")
           put(
             "locations",
@@ -276,7 +321,7 @@ class EpubReaderFragment : VisualReaderFragment() {
         val content = contentService.content(hrefStartLocator)
         val iterator = content.iterator()
         fun normalizeHref(value: String): String = value.trim().removePrefix("/")
-        val targetHref = normalizeHref(href)
+        val targetHref = normalizeHref(hrefKey)
 
         val segments = mutableListOf<SegmentInfo>()
         var seenTargetHref = false
@@ -339,7 +384,7 @@ class EpubReaderFragment : VisualReaderFragment() {
           val localStart = (overlapStart - segStart).toInt()
           val localEnd = (overlapEnd - segStart).toInt()
 
-          val locator = if (localStart == 0 && localEnd == segment.text.length) {
+          val locatorBase = if (localStart == 0 && localEnd == segment.text.length) {
             segment.locator
           } else {
             val prefixStart = (localStart - TEXT_QUOTE_CONTEXT_CHARS).coerceAtLeast(0)
@@ -348,6 +393,12 @@ class EpubReaderFragment : VisualReaderFragment() {
             val highlight = segment.text.substring(localStart, localEnd)
             val after = segment.text.substring(localEnd, suffixEnd).takeUnless { it.isBlank() }
             segment.locator.copy(text = Locator.Text(before = before, highlight = highlight, after = after))
+          }
+
+          val locator = locatorBase.let {
+            val locJson = it.toJSON()
+            sanitizeLocatorJsonForTextQuoteAnchoring(locJson)
+            Locator.fromJSON(locJson) ?: it
           }
 
           // Extra guard: keep decorations ordered and non-overlapping when progression input is.
@@ -551,7 +602,8 @@ class EpubReaderFragment : VisualReaderFragment() {
     }
 
     private suspend fun computeChapterSentences(href: String): List<String> {
-      val index = sentenceIndexProvider.getIndex(href)
+      val hrefKey = normalizedHrefForComparison(href)
+      val index = sentenceIndexProvider.getIndex(hrefKey)
       return index.sentences.map { it.text }
     }
 
@@ -566,12 +618,14 @@ class EpubReaderFragment : VisualReaderFragment() {
       val href = json.optString("href")
       if (href.isBlank()) return SentenceDecorationResult(emptyList(), null)
 
+      val hrefKey = normalizedHrefForComparison(href)
+
       val highlightStyle = HighlightStyleParser.parseHighlightStyle(json)
 
       val sentenceIndex = json.optInt("sentenceIndex", Int.MIN_VALUE)
       if (sentenceIndex == Int.MIN_VALUE || sentenceIndex < 0) return SentenceDecorationResult(emptyList(), null)
 
-      val sentenceIndexData = sentenceIndexProvider.getIndex(href)
+      val sentenceIndexData = sentenceIndexProvider.getIndex(hrefKey)
       if (sentenceIndex >= sentenceIndexData.sentences.size) return SentenceDecorationResult(emptyList(), null)
 
       val target = sentenceIndexData.sentences[sentenceIndex]
@@ -585,14 +639,17 @@ class EpubReaderFragment : VisualReaderFragment() {
       val focusProgression = target.progression?.coerceIn(0.0, 1.0)
 
       val focusLocator: Locator? = focusProgression?.let { pVal ->
+        val resolver = positionResolver
         Locator.fromJSON(
           JSONObject().apply {
-            put("href", href)
+            put("href", hrefKey)
             put("type", "application/xhtml+xml")
             put(
               "locations",
               JSONObject().apply {
                 put("progression", pVal)
+                resolver.resolvePositionFromProgression(hrefKey, pVal)?.let { put("position", it) }
+                resolver.resolveTotalProgressionFromProgression(hrefKey, pVal)?.let { put("totalProgression", it) }
               }
             )
           }
@@ -605,6 +662,7 @@ class EpubReaderFragment : VisualReaderFragment() {
 
       // Map combined string offsets to segment-local offsets. We always insert 1 space between
       // segments in buildCombinedText, so each segment consumes segLen (+1 separator except last).
+      val resolver = positionResolver
       for (i in sentenceIndexData.segments.indices) {
         val seg = sentenceIndexData.segments[i]
         val segLen = seg.text.length.toLong()
@@ -622,7 +680,7 @@ class EpubReaderFragment : VisualReaderFragment() {
         val localEnd = (overlapEnd - segStart).toInt().coerceIn(0, seg.text.length)
         if (localEnd <= localStart) continue
 
-        val locator = if (localStart == 0 && localEnd == seg.text.length) {
+        val locatorBase = if (localStart == 0 && localEnd == seg.text.length) {
           seg.locator
         } else {
           val prefixStart = (localStart - TEXT_QUOTE_CONTEXT_CHARS).coerceAtLeast(0)
@@ -632,6 +690,11 @@ class EpubReaderFragment : VisualReaderFragment() {
           val after = seg.text.substring(localEnd, suffixEnd).takeUnless { it.isBlank() }
           seg.locator.copy(text = Locator.Text(before = before, highlight = highlight, after = after))
         }
+
+        val sentenceProgression = (target.progression
+          ?: if (sentenceIndexData.totalChars > 0) (target.start.toDouble() / sentenceIndexData.totalChars.toDouble()) else 0.0
+          ).coerceIn(0.0, 1.0)
+        val locator = rewriteLocatorForSentence(locatorBase, hrefKey, sentenceProgression, resolver)
 
         val style = Decoration.Style.Highlight(highlightStyle.tint, highlightStyle.isActive)
         decorations.add(Decoration("$HIGHLIGHT_ID_PREFIX$decorationIndex", locator, style, emptyMap<String, Any>()))
@@ -658,7 +721,9 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
       viewLifecycleOwner.lifecycleScope.launch {
         try {
-          val index = sentenceIndexProvider.getIndex(href)
+          val hrefKey = normalizedHrefForComparison(href)
+          val resolver = positionResolver
+          val index = sentenceIndexProvider.getIndex(hrefKey)
           val total = index.sentences.size
           val safeOffset = offset.coerceIn(0, total)
           val safeLimit = limit.coerceAtLeast(0)
@@ -672,7 +737,7 @@ class EpubReaderFragment : VisualReaderFragment() {
                 SentencePageItem(
                   index = s.index,
                   text = s.text,
-                  locator = locatorForSentence(index, s),
+                  locator = locatorForSentence(index, s, hrefKey, resolver),
                 )
               }
           }
@@ -689,7 +754,12 @@ class EpubReaderFragment : VisualReaderFragment() {
       val locator: Locator?,
     )
 
-    private fun locatorForSentence(index: SentenceIndex, sentence: SentenceEntry): Locator? {
+    private fun locatorForSentence(
+      index: SentenceIndex,
+      sentence: SentenceEntry,
+      hrefKey: String,
+      resolver: PublicationPositionResolver,
+    ): Locator? {
       val segments = index.segments
       if (segments.isEmpty()) return null
 
@@ -725,9 +795,13 @@ class EpubReaderFragment : VisualReaderFragment() {
       val before = resolved.text.substring(prefixStart, localStart).takeUnless { it.isBlank() }
       val highlight = resolved.text.substring(localStart, localEnd)
       val after = resolved.text.substring(localEnd, suffixEnd).takeUnless { it.isBlank() }
-      return resolved.locator.copy(
+      val base = resolved.locator.copy(
         text = Locator.Text(before = before, highlight = highlight, after = after)
       )
+
+      val p = sentence.progression
+        ?: if (index.totalChars > 0) (sentence.start.toDouble() / index.totalChars.toDouble()).coerceIn(0.0, 1.0) else 0.0
+      return rewriteLocatorForSentence(base, hrefKey, p, resolver)
     }
 
     fun getSentenceIndexFromProgressionAsync(
@@ -742,7 +816,8 @@ class EpubReaderFragment : VisualReaderFragment() {
       }
       viewLifecycleOwner.lifecycleScope.launch {
         try {
-          val index = sentenceIndexProvider.getIndex(href)
+          val hrefKey = normalizedHrefForComparison(href)
+          val index = sentenceIndexProvider.getIndex(hrefKey)
           val p = progression.coerceIn(0.0, 1.0)
           val sentences = index.sentences
           if (sentences.isEmpty()) {
@@ -750,8 +825,8 @@ class EpubReaderFragment : VisualReaderFragment() {
             return@launch
           }
 
-          val positions = positionResolver.progressionsForHref(href)
-          val boundaryIndex = if (positions.isEmpty()) 0 else positionResolver.boundaryIndexForProgression(href, p)
+          val positions = positionResolver.progressionsForHref(hrefKey)
+          val boundaryIndex = if (positions.isEmpty()) 0 else positionResolver.boundaryIndexForProgression(hrefKey, p)
           val pageStart = if (positions.isEmpty()) 0.0 else positions.getOrNull(boundaryIndex) ?: 0.0
           val pageEnd = if (positions.isEmpty()) 1.0 else positions.getOrNull(boundaryIndex + 1) ?: 1.0
           val EPS = 1e-9
