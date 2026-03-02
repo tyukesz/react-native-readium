@@ -62,6 +62,7 @@ export const Reader: React.FC<ReaderProps> = ({
     epubUrl,
     epubPath,
     initialLocation,
+    useFerfiEpub: true,
   });
   const { location, setLocation } = useExternalLocation(externalLocation);
   const [preferences, setPreferences] = useState<ReadiumProps['preferences']>({
