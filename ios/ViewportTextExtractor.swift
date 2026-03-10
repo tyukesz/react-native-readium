@@ -299,6 +299,28 @@ final class ViewportTextExtractor {
         }
       }
 
+      function isInNormalFlow(textNode) {
+        try {
+          if (!textNode) return false;
+          var el = (textNode.nodeType === Node.ELEMENT_NODE)
+            ? textNode
+            : (textNode.parentElement || null);
+          var hops = 0;
+          while (el && hops++ < 16) {
+            var style = win.getComputedStyle ? win.getComputedStyle(el) : null;
+            if (style) {
+              var pos = style.position;
+              if (pos === 'fixed' || pos === 'sticky') return false;
+              if (style.display === 'none' || style.visibility === 'hidden') return false;
+            }
+            el = el.parentElement;
+          }
+          return true;
+        } catch (e) {
+          return false;
+        }
+      }
+
       function createTextWalker() {
         return doc.createTreeWalker(
           root,
@@ -327,6 +349,198 @@ final class ViewportTextExtractor {
         walker.currentNode = fromTextNode;
         var n = walker.nextNode();
         return n || null;
+      }
+
+      function firstVisibleCharOffsetInTextNode(textNode, vw, vh) {
+        try {
+          if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+          if (!isInNormalFlow(textNode)) return null;
+
+          var text = textNode.nodeValue || "";
+          if (!text || text.length === 0) return null;
+
+          var whole = doc.createRange();
+          whole.selectNodeContents(textNode);
+          var rects = whole.getClientRects();
+          var intersects = false;
+          if (rects && rects.length) {
+            for (var ri = 0; ri < rects.length; ri++) {
+              if (rectIntersectsViewport(rects[ri], vw, vh)) {
+                intersects = true;
+                break;
+              }
+            }
+          }
+          if (!intersects) return null;
+
+          var step = text.length > 256 ? 16 : (text.length > 96 ? 8 : 4);
+          for (var i = 0; i < text.length; i += step) {
+            if (!isCharVisible(textNode, i, vw, vh)) continue;
+            var start = Math.max(0, i - step);
+            for (var j = start; j <= i; j++) {
+              if (isCharVisible(textNode, j, vw, vh)) return j;
+            }
+          }
+
+          var tailStart = Math.max(0, text.length - step);
+          for (var k = tailStart; k < text.length; k++) {
+            if (isCharVisible(textNode, k, vw, vh)) return k;
+          }
+
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function lastVisibleCharOffsetInTextNode(textNode, vw, vh) {
+        try {
+          if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+          if (!isInNormalFlow(textNode)) return null;
+
+          var text = textNode.nodeValue || "";
+          if (!text || text.length === 0) return null;
+
+          var whole = doc.createRange();
+          whole.selectNodeContents(textNode);
+          var rects = whole.getClientRects();
+          var intersects = false;
+          if (rects && rects.length) {
+            for (var ri = 0; ri < rects.length; ri++) {
+              if (rectIntersectsViewport(rects[ri], vw, vh)) {
+                intersects = true;
+                break;
+              }
+            }
+          }
+          if (!intersects) return null;
+
+          var step = text.length > 256 ? 16 : (text.length > 96 ? 8 : 4);
+          for (var i = text.length - 1; i >= 0; i -= step) {
+            if (!isCharVisible(textNode, i, vw, vh)) continue;
+            var end = Math.min(text.length - 1, i + step);
+            for (var j = end; j >= i; j--) {
+              if (isCharVisible(textNode, j, vw, vh)) return j;
+            }
+          }
+
+          var headEnd = Math.min(text.length - 1, step - 1);
+          for (var k = headEnd; k >= 0; k--) {
+            if (isCharVisible(textNode, k, vw, vh)) return k;
+          }
+
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function findFirstVisibleCaretByDom(vw, vh) {
+        try {
+          var walker = createTextWalker();
+          var node = walker.nextNode();
+          while (node) {
+            var offset = firstVisibleCharOffsetInTextNode(node, vw, vh);
+            if (offset !== null) {
+              return makeCaret(node, offset);
+            }
+            node = walker.nextNode();
+          }
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function findLastVisibleCaretByDom(vw, vh) {
+        try {
+          var walker = createTextWalker();
+          var nodes = [];
+          var node = walker.nextNode();
+          while (node) {
+            nodes.push(node);
+            node = walker.nextNode();
+          }
+
+          for (var ni = nodes.length - 1; ni >= 0; ni--) {
+            var textNode = nodes[ni];
+            var offset = lastVisibleCharOffsetInTextNode(textNode, vw, vh);
+            if (offset !== null) {
+              var text = textNode.nodeValue || "";
+              return makeCaret(textNode, Math.min(text.length, offset + 1));
+            }
+          }
+
+          return null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function normalizeCaretToVisibleText(caret, vw, vh) {
+        try {
+          if (!caret) return null;
+
+          var walker = createTextWalker();
+          var node = caret.startContainer;
+          var offset = caret.startOffset;
+          if (!node) return null;
+
+          if (node.nodeType !== Node.TEXT_NODE) {
+            var first = firstTextInOrAfter(walker, node);
+            if (!first) return null;
+            node = first;
+            offset = 0;
+          }
+
+          var text = node.nodeValue || "";
+          if (!text || text.length === 0) return null;
+
+          // caret offsets are between characters; try the character at the offset
+          // first, then the previous one.
+          var idx = offset;
+          if (idx >= text.length) idx = text.length - 1;
+          if (idx < 0) idx = 0;
+
+          var ok = isCharVisible(node, idx, vw, vh);
+          if (!ok && idx > 0) ok = isCharVisible(node, idx - 1, vw, vh);
+          if (!ok) return null;
+
+          if (!isInNormalFlow(node)) return null;
+
+          return { node: node, offset: offset };
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function isCaretVisible(caret, vw, vh) {
+        return !!normalizeCaretToVisibleText(caret, vw, vh);
+      }
+
+      function scanDownForVisibleCaret(x, yStart, vw, vh, margin) {
+        var step = 16;
+        var y = yStart;
+        var maxY = Math.min(vh - margin, yStart + Math.min(Math.floor(vh * 0.35), 420));
+        while (y <= maxY) {
+          var c = caretAt(x, y, vw, vh);
+          if (isCaretVisible(c, vw, vh)) return c;
+          y += step;
+        }
+        return null;
+      }
+
+      function scanUpForVisibleCaret(x, yStart, vw, vh, margin) {
+        var step = 16;
+        var y = yStart;
+        var minY = margin;
+        var limit = 0;
+        while (y >= minY && limit++ < 48) {
+          var c = caretAt(x, y, vw, vh);
+          if (isCaretVisible(c, vw, vh)) return c;
+          y -= step;
+        }
+        return null;
       }
 
       function extendEndCaretToLastVisibleChar(caret, vw, vh, maxSteps) {
@@ -435,7 +649,8 @@ final class ViewportTextExtractor {
         [margin, margin],
         [Math.floor(vw * 0.25), margin],
         [Math.floor(vw * 0.5), margin],
-        [margin, Math.floor(vh * 0.25)]
+        [margin, Math.floor(vh * 0.25)],
+        [Math.floor(vw * 0.5), Math.floor(vh * 0.5)]
       ];
 
       var endCandidates = [
@@ -448,32 +663,82 @@ final class ViewportTextExtractor {
       ];
 
       var startLen = null;
-      for (var si = 0; si < startCandidates.length; si++) {
-        var pt = startCandidates[si];
-        var c = caretAt(pt[0], pt[1], vw, vh);
-        var l = preLengthForCaret(c);
-        if (l === null) continue;
-        if (startLen === null || l < startLen) {
-          startLen = l;
+
+      var domStartCaret = findFirstVisibleCaretByDom(vw, vh);
+      if (domStartCaret) {
+        startLen = preLengthForCaret(domStartCaret);
+      }
+
+      if (startLen === null) {
+        for (var si = 0; si < startCandidates.length; si++) {
+          var pt = startCandidates[si];
+          var c = caretAt(pt[0], pt[1], vw, vh);
+          if (!isCaretVisible(c, vw, vh)) continue;
+          var l = preLengthForCaret(c);
+          if (l === null) continue;
+          if (startLen === null || l < startLen) {
+            startLen = l;
+          }
+        }
+      }
+
+      // Fallback for pages where the top probes land in padding or column gutter.
+      if (startLen === null) {
+        for (var si2 = 0; si2 < startCandidates.length; si2++) {
+          var pt3 = startCandidates[si2];
+          var c3 = scanDownForVisibleCaret(pt3[0], pt3[1], vw, vh, margin);
+          if (!c3) continue;
+          var l3 = preLengthForCaret(c3);
+          if (l3 === null) continue;
+          if (startLen === null || l3 < startLen) {
+            startLen = l3;
+          }
         }
       }
 
       var endCaret = null;
       var endLen = null;
-      for (var ei = 0; ei < endCandidates.length; ei++) {
-        var pt2 = endCandidates[ei];
-        var c2 = caretAt(pt2[0], pt2[1], vw, vh);
-        var l2 = preLengthForCaret(c2);
-        if (l2 === null) continue;
-        if (endLen === null || l2 > endLen) {
-          endLen = l2;
-          endCaret = c2;
+
+      var domEndCaret = findLastVisibleCaretByDom(vw, vh);
+      if (domEndCaret) {
+        var domEndLen = preLengthForCaret(domEndCaret);
+        if (domEndLen !== null) {
+          endLen = domEndLen;
+          endCaret = domEndCaret;
+        }
+      }
+
+      if (!endCaret) {
+        for (var ei = 0; ei < endCandidates.length; ei++) {
+          var pt2 = endCandidates[ei];
+          var c2 = caretAt(pt2[0], pt2[1], vw, vh);
+          if (!isCaretVisible(c2, vw, vh)) continue;
+          var l2 = preLengthForCaret(c2);
+          if (l2 === null) continue;
+          if (endLen === null || l2 > endLen) {
+            endLen = l2;
+            endCaret = c2;
+          }
+        }
+      }
+
+      if (!endCaret) {
+        for (var ei2 = 0; ei2 < endCandidates.length; ei2++) {
+          var pt4 = endCandidates[ei2];
+          var c4 = scanUpForVisibleCaret(pt4[0], pt4[1], vw, vh, margin);
+          if (!c4) continue;
+          var l4 = preLengthForCaret(c4);
+          if (l4 === null) continue;
+          if (endLen === null || l4 > endLen) {
+            endLen = l4;
+            endCaret = c4;
+          }
         }
       }
 
       // Make the end boundary inclusive of the last actually-visible glyphs.
       if (endCaret) {
-        var extendedEnd = extendEndCaretToLastVisibleChar(endCaret, vw, vh, 96);
+        var extendedEnd = extendEndCaretToLastVisibleChar(endCaret, vw, vh, 256);
         var extendedLen = preLengthForCaret(extendedEnd);
         if (extendedLen !== null) {
           endCaret = extendedEnd;
