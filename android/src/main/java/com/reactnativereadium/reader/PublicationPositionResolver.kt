@@ -9,7 +9,25 @@ class PublicationPositionResolver(
   private data class Entry(
     val position: Int,
     val progression: Double?,
+    val totalProgression: Double?,
   )
+
+  private data class Snapshot(
+    val byPosition: List<Entry>,
+    val byProgression: List<Entry>,
+  )
+
+  private val snapshotCache = mutableMapOf<String, Snapshot>()
+
+  private fun snapshotForHref(hrefKey: String): Snapshot {
+    return snapshotCache.getOrPut(hrefKey) {
+      val byPosition = entriesForHref(hrefKey)
+      val byProgression = byPosition
+        .filter { it.progression != null }
+        .sortedBy { it.progression }
+      Snapshot(byPosition = byPosition, byProgression = byProgression)
+    }
+  }
 
   fun progressionsForHref(hrefKey: String): List<Double> {
     return positions
@@ -23,7 +41,7 @@ class PublicationPositionResolver(
 
   fun resolveProgressionFromPosition(hrefKey: String, position: Int?): Double? {
     if (position == null) return null
-    val entries = entriesForHref(hrefKey)
+    val entries = snapshotForHref(hrefKey).byPosition
     if (entries.isEmpty()) return null
 
     val idx = entries.indexOfFirst { it.position == position }
@@ -64,7 +82,7 @@ class PublicationPositionResolver(
 
   fun pageRangeFromPosition(hrefKey: String, position: Int?): Pair<Double, Double>? {
     if (position == null) return null
-    val entries = entriesForHref(hrefKey)
+    val entries = snapshotForHref(hrefKey).byPosition
     if (entries.isEmpty()) return null
 
     val idx = entries.indexOfFirst { it.position == position }
@@ -123,13 +141,81 @@ class PublicationPositionResolver(
     return chosen.coerceIn(0.0, 1.0)
   }
 
+  fun resolvePositionFromProgression(hrefKey: String, progression: Double): Int? {
+    val p = progression.coerceIn(0.0, 1.0)
+    val eps = 1e-9
+
+    val snapshot = snapshotForHref(hrefKey)
+    val byProg = snapshot.byProgression
+    if (byProg.isNotEmpty()) {
+      // Upper bound (last with progression <= p).
+      var lo = 0
+      var hi = byProg.size
+      while (lo < hi) {
+        val mid = (lo + hi) ushr 1
+        if ((byProg[mid].progression ?: 0.0) <= p + eps) {
+          lo = mid + 1
+        } else {
+          hi = mid
+        }
+      }
+      val idx = (lo - 1).coerceAtLeast(0)
+      return byProg[idx].position
+    }
+
+    // Fallback: approximate by index within this href.
+    val byPos = snapshot.byPosition
+    if (byPos.isEmpty()) return null
+    if (byPos.size == 1) return byPos[0].position
+    val approxIdx = kotlin.math.floor(p * (byPos.size - 1).toDouble()).toInt().coerceIn(0, byPos.size - 1)
+    return byPos[approxIdx].position
+  }
+
+  fun resolveTotalProgressionFromProgression(hrefKey: String, progression: Double): Double? {
+    val p = progression.coerceIn(0.0, 1.0)
+    val eps = 1e-9
+
+    val snapshot = snapshotForHref(hrefKey)
+    val byProg = snapshot.byProgression
+    if (byProg.isEmpty()) return null
+
+    // Upper bound.
+    var lo = 0
+    var hi = byProg.size
+    while (lo < hi) {
+      val mid = (lo + hi) ushr 1
+      if ((byProg[mid].progression ?: 0.0) <= p + eps) {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+    var idx = (lo - 1).coerceAtLeast(0)
+    byProg[idx].totalProgression?.let { return it }
+
+    // Best-effort: nearest neighbor with totalProgression.
+    var left = idx - 1
+    var right = idx + 1
+    while (left >= 0 || right < byProg.size) {
+      if (left >= 0) {
+        byProg[left].totalProgression?.let { return it }
+        left--
+      }
+      if (right < byProg.size) {
+        byProg[right].totalProgression?.let { return it }
+        right++
+      }
+    }
+    return null
+  }
+
   private fun entriesForHref(hrefKey: String): List<Entry> {
     return positions
       .asSequence()
       .filter { normalizeHref(it.href.toString()) == hrefKey }
       .mapNotNull { loc ->
         val pos = loc.locations.position ?: return@mapNotNull null
-        Entry(pos, loc.locations.progression)
+        Entry(pos, loc.locations.progression, loc.locations.totalProgression)
       }
       .sortedBy { it.position }
       .toList()

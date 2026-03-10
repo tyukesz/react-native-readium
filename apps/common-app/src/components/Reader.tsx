@@ -62,6 +62,7 @@ export const Reader: React.FC<ReaderProps> = ({
     epubUrl,
     epubPath,
     initialLocation,
+    useFerfiEpub: true,
   });
   const { location, setLocation } = useExternalLocation(externalLocation);
   const [preferences, setPreferences] = useState<ReadiumProps['preferences']>({
@@ -183,9 +184,8 @@ export const Reader: React.FC<ReaderProps> = ({
       setIsLoadingSentences(true);
       const page = await getChapterSentencePage(ref, {
         href,
-        offset: 0,
-        limit: 0,
       });
+      console.log('loadSentencesCount', page);
       setSentenceCount(page.total);
     } catch (e) {
       console.log('getChapterSentences failed', e);

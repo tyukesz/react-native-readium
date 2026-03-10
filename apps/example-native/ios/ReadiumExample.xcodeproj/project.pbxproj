@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+		A1F0F0D9D1B2486B00F3AF11 /* ferfi.epub in Resources */ = {isa = PBXBuildFile; fileRef = A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */; };
 		1E3BEE17F3AADB11F9BCBDF6 /* libPods-ReadiumExample.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 3A8823A8FA18976EF67D387D /* libPods-ReadiumExample.a */; };
 		2D02E4BD1E0B4A84006451C7 /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
 		52EE71AD2D77A5F200617F39 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EE71AC2D77A5F200617F39 /* AppDelegate.swift */; };
@@ -38,6 +39,7 @@
 		008F07F21AC5B25A0029DE68 /* main.jsbundle */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = main.jsbundle; sourceTree = "<group>"; };
 		00E356EE1AD99517003FC87E /* ReadiumExampleTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ReadiumExampleTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		0F7A153113BA277AD9F4CA21 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = ReadiumExample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; name = ferfi.epub; path = ../../common-app/src/hooks/ferfi.epub; sourceTree = SOURCE_ROOT; };
 		13B07F961A680F5B00A75B9A /* ReadiumExample.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ReadiumExample.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		13B07FB51A68108700A75B9A /* Images.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Images.xcassets; path = ReadiumExample/Images.xcassets; sourceTree = "<group>"; };
 		13B07FB61A68108700A75B9A /* Info.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = Info.plist; path = ReadiumExample/Info.plist; sourceTree = "<group>"; };
@@ -155,6 +157,7 @@
 		EFB246D809604331A20C1ABD /* Resources */ = {
 			isa = PBXGroup;
 			children = (
+				A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -302,6 +305,7 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				E461B59F65233381FD4757D0 /* PrivacyInfo.xcprivacy in Resources */,
+				A1F0F0D9D1B2486B00F3AF11 /* ferfi.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

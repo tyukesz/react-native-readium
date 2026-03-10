@@ -33,8 +33,9 @@ class ReadiumView : UIView, Loggable {
   private let sentenceIndexStore = SentenceIndexStore()
 
   private var publicationPositionsByHref: [String: [Double]] = [:]
-  private var publicationProgressionByPosition: [Int: (href: String, progression: Double)] = [:]
-  private var publicationPositionEntriesByHref: [String: [(position: Int, progression: Double?)]] = [:]
+  private var publicationProgressionByPosition: [Int: (href: String, progression: Double, totalProgression: Double?)] = [:]
+  private var publicationPositionEntriesByHref: [String: [(position: Int, progression: Double?, totalProgression: Double?)]] = [:]
+  private var publicationPositionEntriesByProgressionByHref: [String: [(progression: Double, position: Int, totalProgression: Double?)]] = [:]
 
   private func resolveHrefProgressionFromPosition(hrefKey: String, position: Int) -> Double? {
     guard let entries = publicationPositionEntriesByHref[hrefKey], !entries.isEmpty else {
@@ -88,6 +89,88 @@ class ReadiumView : UIView, Loggable {
     return Double(idx) / Double(entries.count - 1)
   }
 
+  private func resolvePositionFromProgression(hrefKey: String, progression: Double) -> Int? {
+    let p = min(max(progression, 0.0), 1.0)
+    let eps = 1e-9
+
+    if let byProg = publicationPositionEntriesByProgressionByHref[hrefKey], !byProg.isEmpty {
+      // Upper bound on progression (last entry with progression <= p).
+      var lo = 0
+      var hi = byProg.count
+      while lo < hi {
+        let mid = (lo + hi) / 2
+        if byProg[mid].progression <= p + eps {
+          lo = mid + 1
+        } else {
+          hi = mid
+        }
+      }
+      let idx = max(0, lo - 1)
+      return byProg[idx].position
+    }
+
+    // Fallback: approximate by index within this href.
+    guard let entries = publicationPositionEntriesByHref[hrefKey], !entries.isEmpty else {
+      return nil
+    }
+    if entries.count == 1 { return entries[0].position }
+    let approxIdx = Int((p * Double(entries.count - 1)).rounded(.down))
+    let clamped = min(max(approxIdx, 0), entries.count - 1)
+    return entries[clamped].position
+  }
+
+  private func resolveTotalProgressionFromProgression(hrefKey: String, progression: Double) -> Double? {
+    let p = min(max(progression, 0.0), 1.0)
+    let eps = 1e-9
+    guard let byProg = publicationPositionEntriesByProgressionByHref[hrefKey], !byProg.isEmpty else {
+      return nil
+    }
+
+    // Upper bound on progression.
+    var lo = 0
+    var hi = byProg.count
+    while lo < hi {
+      let mid = (lo + hi) / 2
+      if byProg[mid].progression <= p + eps {
+        lo = mid + 1
+      } else {
+        hi = mid
+      }
+    }
+    var idx = max(0, lo - 1)
+
+    if let tp = byProg[idx].totalProgression { return tp }
+
+    // Best-effort: search nearest neighbor with totalProgression.
+    var left = idx - 1
+    var right = idx + 1
+    while left >= 0 || right < byProg.count {
+      if left >= 0, let tp = byProg[left].totalProgression { return tp }
+      if right < byProg.count, let tp = byProg[right].totalProgression { return tp }
+      left -= 1
+      right += 1
+    }
+    return nil
+  }
+
+  private func rewrittenSentenceLocatorJson(_ entry: SentenceEntry, hrefKey: String) -> [String: Any] {
+    var json = entry.locator.json
+    var locations = (json["locations"] as? [String: Any]) ?? [:]
+
+    // Per-sentence progression must be stable and not snapped to segment locators.
+    locations["progression"] = min(max(entry.progression, 0.0), 1.0)
+
+    if let pos = resolvePositionFromProgression(hrefKey: hrefKey, progression: entry.progression) {
+      locations["position"] = pos
+    }
+    if let tp = resolveTotalProgressionFromProgression(hrefKey: hrefKey, progression: entry.progression) {
+      locations["totalProgression"] = tp
+    }
+
+    json["locations"] = locations
+    return json
+  }
+
   private func ensurePositionsCache() async {
     if !publicationPositionsByHref.isEmpty && !publicationPositionEntriesByHref.isEmpty { return }
     guard let publication = readerViewController?.publication else { return }
@@ -95,18 +178,21 @@ class ReadiumView : UIView, Loggable {
     let positionsResult = await publication.positions()
     if case .success(let positions) = positionsResult {
       var byHref: [String: [Double]] = [:]
-      var entriesByHref: [String: [(position: Int, progression: Double?)]] = [:]
+      var entriesByHref: [String: [(position: Int, progression: Double?, totalProgression: Double?)]] = [:]
+      var entriesByProgressionByHref: [String: [(progression: Double, position: Int, totalProgression: Double?)]] = [:]
       for loc in positions {
         let k = normalizedHrefForComparisonAnyURL(loc.href)
         let prog = loc.locations.progression
+        let totalProg = loc.locations.totalProgression
         if let prog {
           byHref[k, default: []].append(prog)
         }
 
         if let pos = loc.locations.position {
-          entriesByHref[k, default: []].append((position: pos, progression: prog))
+          entriesByHref[k, default: []].append((position: pos, progression: prog, totalProgression: totalProg))
           if let prog {
-            publicationProgressionByPosition[pos] = (href: k, progression: prog)
+            publicationProgressionByPosition[pos] = (href: k, progression: prog, totalProgression: totalProg)
+            entriesByProgressionByHref[k, default: []].append((progression: prog, position: pos, totalProgression: totalProg))
           }
         }
       }
@@ -118,6 +204,11 @@ class ReadiumView : UIView, Loggable {
         entriesByHref[k] = list.sorted { $0.position < $1.position }
       }
       publicationPositionEntriesByHref = entriesByHref
+
+      for (k, list) in entriesByProgressionByHref {
+        entriesByProgressionByHref[k] = list.sorted { $0.progression < $1.progression }
+      }
+      publicationPositionEntriesByProgressionByHref = entriesByProgressionByHref
     }
   }
 
@@ -156,7 +247,7 @@ class ReadiumView : UIView, Loggable {
       guard let entries = publicationPositionEntriesByHref[hrefKey], !entries.isEmpty else { return nil }
       return PublicationPositionResolver.pageRangeFromPosition(
         position: current.locations.position,
-        entries: entries
+        entries: entries.map { (position: $0.position, progression: $0.progression) }
       )
     }
 
@@ -290,6 +381,7 @@ class ReadiumView : UIView, Loggable {
       sentenceIndexStore.clear()
       publicationPositionsByHref.removeAll()
       publicationPositionEntriesByHref.removeAll()
+      publicationPositionEntriesByProgressionByHref.removeAll()
       publicationProgressionByPosition.removeAll()
       let initialLocation = file?["initialLocation"] as? NSDictionary
       if let url = file?["url"] as? String {
@@ -307,6 +399,7 @@ class ReadiumView : UIView, Loggable {
       sentenceIndexStore.clear()
       publicationPositionsByHref.removeAll()
       publicationPositionEntriesByHref.removeAll()
+      publicationPositionEntriesByProgressionByHref.removeAll()
       publicationProgressionByPosition.removeAll()
       self.updatePreferences(preferences)
     }
@@ -512,12 +605,14 @@ class ReadiumView : UIView, Loggable {
       let safeOffset = max(0, min(offset, total))
       let safeLimit = max(0, limit)
 
+      let hrefKey = self.normalizedHrefForComparison(href)
+
       let slice = safeLimit == 0 ? [] : Array(sentences.dropFirst(safeOffset).prefix(safeLimit))
       let items = slice.map { s in
         [
           "index": s.index,
           "text": s.text,
-          "locator": s.locator.json,
+          "locator": self.rewrittenSentenceLocatorJson(s, hrefKey: hrefKey),
         ]
       }
 
