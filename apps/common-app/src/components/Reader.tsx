@@ -198,8 +198,8 @@ export const Reader: React.FC<ReaderProps> = ({
   const loadSentencePreview = useCallback(async () => {
     if (!isNative) return;
 
-    const result = await openPublicationHeadless({ url: file!.url });
-    console.log(result);
+    // const result = await openPublicationHeadless({ url: file!.url });
+    // console.log(result);
 
     try {
       setIsLoadingPreview(true);
@@ -207,7 +207,7 @@ export const Reader: React.FC<ReaderProps> = ({
         includeText: true,
         source: 'viewport',
       });
-      console.log(res);
+      console.log({ start: res?.start, end: res?.end, text: res?.text });
       setVisibleRange(res);
     } catch (e) {
       console.log('loadSentencePreview failed', e);
