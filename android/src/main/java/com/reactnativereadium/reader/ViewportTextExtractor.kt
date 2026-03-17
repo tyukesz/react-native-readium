@@ -250,6 +250,73 @@ class ViewportTextExtractor {
           return n || null;
         }
 
+        function lastVisibleCharOffsetInTextNode(textNode, vw, vh) {
+          try {
+            if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+            if (!isInNormalFlow(textNode)) return null;
+
+            var text = textNode.nodeValue || "";
+            if (!text || text.length === 0) return null;
+
+            var whole = DOC.createRange();
+            whole.selectNodeContents(textNode);
+            var rects = whole.getClientRects();
+            var intersects = false;
+            if (rects && rects.length) {
+              for (var ri = 0; ri < rects.length; ri++) {
+                if (rectIntersectsViewport(rects[ri], vw, vh)) {
+                  intersects = true;
+                  break;
+                }
+              }
+            }
+            if (!intersects) return null;
+
+            var step = text.length > 256 ? 16 : (text.length > 96 ? 8 : 4);
+            for (var i = text.length - 1; i >= 0; i -= step) {
+              if (!isCharVisible(textNode, i, vw, vh)) continue;
+              var end = Math.min(text.length - 1, i + step);
+              for (var j = end; j >= i; j--) {
+                if (isCharVisible(textNode, j, vw, vh)) return j;
+              }
+            }
+
+            var headEnd = Math.min(text.length - 1, step - 1);
+            for (var k = headEnd; k >= 0; k--) {
+              if (isCharVisible(textNode, k, vw, vh)) return k;
+            }
+
+            return null;
+          } catch (e) {
+            return null;
+          }
+        }
+
+        function findLastVisibleCaretByDom(vw, vh) {
+          try {
+            var walker = createTextWalker();
+            var nodes = [];
+            var node = walker.nextNode();
+            while (node) {
+              nodes.push(node);
+              node = walker.nextNode();
+            }
+
+            for (var ni = nodes.length - 1; ni >= 0; ni--) {
+              var textNode = nodes[ni];
+              var offset = lastVisibleCharOffsetInTextNode(textNode, vw, vh);
+              if (offset !== null) {
+                var text = textNode.nodeValue || "";
+                return makeCaret(textNode, Math.min(text.length, offset + 1));
+              }
+            }
+
+            return null;
+          } catch (e) {
+            return null;
+          }
+        }
+
         function normalizeCaretToVisibleText(caret, vw, vh) {
           try {
             if (!caret) return null;
@@ -435,15 +502,27 @@ class ViewportTextExtractor {
 
         var endCaret = null;
         var endLen = null;
-        for (var ei = 0; ei < endCandidates.length; ei++) {
-          var pt2 = endCandidates[ei];
-          var c2 = caretAt(pt2[0], pt2[1], vw, vh);
-          if (!isCaretVisible(c2, vw, vh)) continue;
-          var l2 = preLengthForCaret(c2);
-          if (l2 === null) continue;
-          if (endLen === null || l2 > endLen) {
-            endLen = l2;
-            endCaret = c2;
+
+        var domEndCaret = findLastVisibleCaretByDom(vw, vh);
+        if (domEndCaret) {
+          var domEndLen = preLengthForCaret(domEndCaret);
+          if (domEndLen !== null) {
+            endLen = domEndLen;
+            endCaret = domEndCaret;
+          }
+        }
+
+        if (!endCaret) {
+          for (var ei = 0; ei < endCandidates.length; ei++) {
+            var pt2 = endCandidates[ei];
+            var c2 = caretAt(pt2[0], pt2[1], vw, vh);
+            if (!isCaretVisible(c2, vw, vh)) continue;
+            var l2 = preLengthForCaret(c2);
+            if (l2 === null) continue;
+            if (endLen === null || l2 > endLen) {
+              endLen = l2;
+              endCaret = c2;
+            }
           }
         }
 
@@ -466,7 +545,7 @@ class ViewportTextExtractor {
         // Make the end boundary inclusive of the last actually-visible glyphs.
         // This corrects cases where caret-from-point lands a few chars early near the viewport edge.
         if (endCaret) {
-          var extendedEnd = extendEndCaretToLastVisibleChar(endCaret, vw, vh, 96);
+          var extendedEnd = extendEndCaretToLastVisibleChar(endCaret, vw, vh, 256);
           var extendedLen = preLengthForCaret(extendedEnd);
           if (extendedLen !== null) {
             endCaret = extendedEnd;
