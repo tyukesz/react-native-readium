@@ -46,6 +46,7 @@ export default function App() {
               epubPath={epubPath}
               initialLocation={INITIAL_LOCATION}
               externalLocation={externalLocation}
+              limitToFirstTwoChapters={true}
               onTocChange={setToc}
               onOpenToc={() => handleOpenToc(navigation)}
             />

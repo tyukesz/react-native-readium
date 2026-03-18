@@ -1900,7 +1900,7 @@ PODS:
     - React-RCTFBReactNativeSpec
     - ReactCommon/turbomodule/core
     - SocketRocket
-  - react-native-readium (5.0.9):
+  - react-native-readium (5.0.11):
     - React-Core
     - ReadiumAdapterGCDWebServer (~> 3.5.0)
     - ReadiumInternal
@@ -3028,7 +3028,7 @@ SPEC CHECKSUMS:
   React-logger: 6ac901f5c7f7321d2be1a40b203bccc2e23411e3
   React-Mapbuffer: 2e0e7cc5b7064eaed9c8b8afc3a87621cb7ef5cd
   React-microtasksnativemodule: dd4d33b251b57e5027c572c6d0b45cbfbcfaa386
-  react-native-readium: d46951a0afe76ebc88e0ad3c1e140fd7a92c513e
+  react-native-readium: 49f2b50e730b5b0941057bf5aaf7b711ff051fe8
   react-native-safe-area-context: 54d812805f3c4e08a4580ad086cbde1d8780c2e4
   react-native-slider: 5da4af460d0dd1346f927e829dfecbb81bd46f91
   React-NativeModulesApple: 7f2f2fed3f6c858889eb61d09941be965d52df58

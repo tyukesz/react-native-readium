@@ -1,12 +1,12 @@
 import React, {
   useCallback,
-  useState,
   useEffect,
   forwardRef,
   useRef,
   useMemo,
+  useState,
 } from 'react';
-import { View, Platform, StyleSheet } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import type {
   BaseReadiumViewProps,
@@ -21,12 +21,27 @@ export type ReadiumProps = Omit<BaseReadiumViewProps, 'preferences'> & {
   preferences: Preferences;
 };
 
+const normalizeHref = (href: string): string => {
+  const trimmed = href.trim().replace(/^\/+/, '');
+  const noFragment = trimmed.split('#')[0] ?? trimmed;
+  const noQuery = noFragment.split('?')[0] ?? noFragment;
+
+  try {
+    return decodeURIComponent(noQuery);
+  } catch {
+    return noQuery;
+  }
+};
+
 export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
   (
     {
       onLocationChange: wrappedOnLocationChange,
       onPublicationReady: wrappedOnPublicationReady,
+      onRestrictedNavigation: wrappedOnRestrictedNavigation,
       onTap: wrappedOnTap,
+      allowedHrefs,
+      paywallHTML,
       preferences,
       ...props
     },
@@ -72,6 +87,18 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       [wrappedOnPublicationReady]
     );
 
+    const onRestrictedNavigation = useCallback(
+      (event: any) => {
+        const href = event?.nativeEvent?.href;
+        if (typeof href === 'string') {
+          if (wrappedOnRestrictedNavigation) {
+            wrappedOnRestrictedNavigation(href.length === 0 ? '' : normalizeHref(href));
+          }
+        }
+      },
+      [wrappedOnRestrictedNavigation]
+    );
+
     const onTap = useCallback(
       (event: any) => {
         if (wrappedOnTap) {
@@ -103,6 +130,14 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       [preferences]
     );
 
+    const stringifiedAllowedHrefs = useMemo(() => {
+      if (allowedHrefs === undefined) {
+        return undefined;
+      }
+
+      return JSON.stringify(allowedHrefs.map(normalizeHref));
+    }, [allowedHrefs]);
+
     return (
       <View style={styles.container} onLayout={onLayout}>
         <BaseReadiumView
@@ -110,8 +145,11 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
           width={width}
           {...props}
           preferences={stringifiedPreferences}
+          allowedHrefs={stringifiedAllowedHrefs}
+          paywallHTML={paywallHTML}
           onLocationChange={onLocationChange}
           onPublicationReady={onPublicationReady}
+          onRestrictedNavigation={onRestrictedNavigation}
           onTap={onTap}
           ref={defaultRef}
         />
