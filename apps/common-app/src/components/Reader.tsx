@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useState, useRef } from 'react';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import {
   StyleSheet,
   View,
@@ -48,6 +54,8 @@ export interface ReaderProps {
   onOpenToc?: () => void;
   /** Optional callback when TOC is available */
   onTocChange?: (toc: Link[]) => void;
+  /** Example mode: only first two readingOrder chapters are allowed */
+  limitToFirstTwoChapters?: boolean;
 }
 
 export const Reader: React.FC<ReaderProps> = ({
@@ -57,6 +65,7 @@ export const Reader: React.FC<ReaderProps> = ({
   externalLocation,
   onOpenToc,
   onTocChange,
+  limitToFirstTwoChapters = false,
 }) => {
   const { file, isLoading } = useEpubFile({
     epubUrl,
@@ -79,8 +88,137 @@ export const Reader: React.FC<ReaderProps> = ({
   const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
   const [visibleRange, setVisibleRange] = useState<VisibleRange | null>(null);
   const [progressionText, setProgressionText] = useState<string>('0');
+  const [allowedHrefs, setAllowedHrefs] = useState<string[] | undefined>(
+    undefined
+  );
+  const [isLoadingAllowedHrefs, setIsLoadingAllowedHrefs] =
+    useState<boolean>(false);
   const ref = useRef<any>(undefined);
   const isNative = Platform.OS !== 'web';
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function resolveAllowedHrefs() {
+      if (!limitToFirstTwoChapters) {
+        setAllowedHrefs(undefined);
+        setIsLoadingAllowedHrefs(false);
+        return;
+      }
+
+      if (!isNative || !file?.url) {
+        setAllowedHrefs(undefined);
+        setIsLoadingAllowedHrefs(false);
+        return;
+      }
+
+      setIsLoadingAllowedHrefs(true);
+      // Keep access restricted while loading the headless index.
+      setAllowedHrefs([]);
+
+      try {
+        const index = await openPublicationHeadless({
+          url: file.url,
+          id: `first-two-${file.url}`,
+        });
+
+        const readingOrderHrefs = (index.readingOrder || [])
+          .map((item) => item.href)
+          .filter((href): href is string => !!href)
+          .slice(0, 2);
+
+        const fallbackPositionHrefs = Array.from(
+          new Set(
+            (index.positions || [])
+              .map((position) => position.href)
+              .filter((href): href is string => !!href)
+          )
+        ).slice(0, 2);
+
+        const resolved =
+          readingOrderHrefs.length > 0
+            ? readingOrderHrefs
+            : fallbackPositionHrefs;
+
+        if (!isCancelled) {
+          setAllowedHrefs(resolved);
+          console.log('Allowed hrefs (first two chapters):', resolved);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          console.log(
+            'Failed to resolve allowed hrefs from headless index',
+            error
+          );
+          setAllowedHrefs([]);
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingAllowedHrefs(false);
+        }
+      }
+    }
+
+    resolveAllowedHrefs();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [file?.url, isNative, limitToFirstTwoChapters]);
+
+  const paywallHTML = useMemo(() => {
+    const message = isLoadingAllowedHrefs
+      ? 'Resolving the first two allowed chapters.'
+      : 'Only the first two chapters are enabled in test mode.';
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subscription required</title>
+    <style>
+      :root { color-scheme: light dark; }
+      html, body {
+        margin: 0;
+        min-height: 100%;
+        background: #101114;
+        color: #f6f7fb;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
+        box-sizing: border-box;
+      }
+      main {
+        max-width: 30rem;
+        text-align: center;
+      }
+      h1 {
+        margin: 0 0 0.75rem;
+        font-size: 2rem;
+        line-height: 1.05;
+      }
+      p {
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.6;
+        opacity: 0.84;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Subscription required</h1>
+      <p>${message}</p>
+    </main>
+  </body>
+</html>`;
+  }, [isLoadingAllowedHrefs]);
 
   const openHighlightModal = () => {
     // Default chapter to current chapter if available.
@@ -216,7 +354,7 @@ export const Reader: React.FC<ReaderProps> = ({
     } finally {
       setIsLoadingPreview(false);
     }
-  }, [isNative, file]);
+  }, [isNative]);
 
   const jumpToProgression = useCallback(async () => {
     const href = highlightHref.trim();
@@ -291,10 +429,15 @@ export const Reader: React.FC<ReaderProps> = ({
               file={file}
               location={location}
               preferences={preferences}
+              allowedHrefs={limitToFirstTwoChapters ? allowedHrefs : undefined}
+              paywallHTML={limitToFirstTwoChapters ? paywallHTML : undefined}
               hidePageNumbers={true}
               onLocationChange={(locator: Locator) => {
                 console.log('onLocationChange', locator);
                 setLocation(locator);
+              }}
+              onRestrictedNavigation={(href: string) => {
+                console.log('restricted navigation', href);
               }}
               onPublicationReady={(event: PublicationReadyEvent) => {
                 console.log('onPublicationReady', event);

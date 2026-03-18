@@ -49,6 +49,13 @@ class ReadiumViewManager(
           MapBuilder.of("bubbled", ON_TAP)
         )
       )
+      .put(
+        ON_RESTRICTED_NAVIGATION,
+        MapBuilder.of(
+          "phasedRegistrationNames",
+          MapBuilder.of("bubbled", ON_RESTRICTED_NAVIGATION)
+        )
+      )
       .build()
   }
 
@@ -122,6 +129,18 @@ class ReadiumViewManager(
     view.updatePreferencesFromJsonString(serialisedPreferences)
   }
 
+  @ReactProp(name = "allowedHrefs")
+  fun setAllowedHrefs(view: ReadiumView, allowedHrefs: String?) {
+    view.updateAllowedHrefsFromJsonString(allowedHrefs)
+    buildForViewIfReady(view)
+  }
+
+  @ReactProp(name = "paywallHTML")
+  fun setPaywallHTML(view: ReadiumView, paywallHTML: String?) {
+    view.paywallHTML = paywallHTML
+    buildForViewIfReady(view)
+  }
+
   @ReactProp(name = "hidePageNumbers", defaultBoolean = false)
   fun setHidePageNumbers(view: ReadiumView, hidePageNumbers: Boolean) {
     view.updatePageNumberVisibility(hidePageNumbers)
@@ -152,7 +171,11 @@ class ReadiumViewManager(
 
     if (file != null && view.isViewInitialized && width > 0 && height > 0) {
       runBlocking {
-        svc.openPublication(file.path, file.initialLocation) { fragment ->
+        svc.openPublication(
+          file.path,
+          file.initialLocation,
+          view.currentRestrictionConfiguration()
+        ) { fragment ->
           view.addFragment(fragment)
         }
       }
@@ -164,5 +187,6 @@ class ReadiumViewManager(
     var ON_LOCATION_CHANGE = "onLocationChange"
     var ON_PUBLICATION_READY = "onPublicationReady"
     var ON_TAP = "onTap"
+    var ON_RESTRICTED_NAVIGATION = "onRestrictedNavigation"
   }
 }

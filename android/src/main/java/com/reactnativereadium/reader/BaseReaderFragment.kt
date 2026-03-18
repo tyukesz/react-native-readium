@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import org.readium.r2.navigator.Navigator
+import org.readium.r2.navigator.epub.EpubNavigatorFragment
 import org.readium.r2.shared.publication.Locator
 import org.readium.r2.shared.publication.services.positions
 
@@ -96,6 +97,16 @@ abstract class BaseReaderFragment : Fragment() {
     }
 
     return navigator.go(locator, animated)
+  }
+
+  fun goForward(animated: Boolean): Boolean {
+    val epubNavigator = navigator as? EpubNavigatorFragment ?: return false
+    return epubNavigator.goForward(animated)
+  }
+
+  fun goBackward(animated: Boolean): Boolean {
+    val epubNavigator = navigator as? EpubNavigatorFragment ?: return false
+    return epubNavigator.goBackward(animated)
   }
 
 }

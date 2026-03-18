@@ -15,6 +15,7 @@ import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.events.Event
 import com.reactnativereadium.reader.BaseReaderFragment
 import com.reactnativereadium.reader.EpubReaderFragment
+import com.reactnativereadium.reader.PublicationRestrictionConfiguration
 import com.reactnativereadium.reader.ReaderViewModel
 import com.reactnativereadium.reader.VisualReaderFragment
 import com.reactnativereadium.utils.Dimensions
@@ -23,6 +24,10 @@ import com.reactnativereadium.utils.LinkOrLocator
 import com.reactnativereadium.utils.MetadataNormalizer
 import com.reactnativereadium.utils.toWritableArray
 import com.reactnativereadium.utils.toWritableMap
+import org.json.JSONArray
+import org.readium.r2.shared.publication.Locator
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 
 class ReadiumView(
@@ -42,8 +47,15 @@ class ReadiumView(
   var lateInitHighlightSentenceJson: String? = null
   var lateInitHighlightLocatorJson: String? = null
   var hidePageNumbers: Boolean = false
+  var paywallHTML: String? = null
   private var pendingLocation: LinkOrLocator? = null
   private var frameCallback: Choreographer.FrameCallback? = null
+  private var allowedHrefsSet: Set<String>? = null
+  private var lastKnownHref: String? = null
+  private var publicationPositions: List<Locator> = emptyList()
+  private var restrictedAnchorLocator: Locator? = null
+  private var activeRestrictedHref: String? = null
+  private var pendingRestrictedTargetHref: String? = null
   
 
   private val gestureDetector = GestureDetector(
@@ -61,10 +73,12 @@ class ReadiumView(
   )
 
   fun updateLocation(location: LinkOrLocator) : Boolean {
+    val effectiveLocation = mapRequestedLocationToRestrictionAnchor(location)
+
     // When using react-native-screens (native stack), the previous screen is often detached / not visible.
     // Navigating the Readium navigator while not visible can update internal state without updating the
     // rendered WebView. Queue the latest requested location and apply it once visible again.
-    pendingLocation = location
+    pendingLocation = effectiveLocation
 
     // Always schedule a retry on the next UI tick (helps during screen transition).
     post { applyPendingLocationIfAny() }
@@ -74,9 +88,145 @@ class ReadiumView(
       return false
     }
 
-    val ok = frag.go(location, true)
+    val ok = frag.go(effectiveLocation, true)
     if (ok) pendingLocation = null
     return ok
+  }
+
+  fun updateAllowedHrefsFromJsonString(allowedHrefsJson: String?) {
+    allowedHrefsSet = parseAllowedHrefs(allowedHrefsJson)
+    recomputeRestrictionAnchorLocator()
+    reevaluateRestrictionForCurrentHref()
+  }
+
+  fun currentRestrictionConfiguration(): PublicationRestrictionConfiguration? {
+    val allowedHrefs = allowedHrefsSet ?: return null
+    return PublicationRestrictionConfiguration(
+      allowedHrefs = allowedHrefs,
+      paywallHTML = paywallHTML
+    )
+  }
+
+  private fun recomputeRestrictionAnchorLocator() {
+    val allowed = allowedHrefsSet
+    val positions = publicationPositions
+
+    if (allowed == null || positions.isEmpty()) {
+      restrictedAnchorLocator = null
+      return
+    }
+
+    restrictedAnchorLocator = positions.firstOrNull { locator ->
+      !allowed.contains(normalizeHrefForComparison(locator.href.toString()))
+    }
+  }
+
+  private fun parseAllowedHrefs(allowedHrefsJson: String?): Set<String>? {
+    val raw = allowedHrefsJson?.trim() ?: return null
+    if (raw.isEmpty()) return null
+
+    return try {
+      val parsed = JSONArray(raw)
+      val normalized = mutableSetOf<String>()
+      for (i in 0 until parsed.length()) {
+        val href = parsed.optString(i, "")
+        if (href.isNotBlank()) {
+          normalized.add(normalizeHrefForComparison(href))
+        }
+      }
+      normalized
+    } catch (e: Exception) {
+      Log.w(TAG, "Failed to parse allowedHrefs: ${e.message}")
+      null
+    }
+  }
+
+  private fun normalizeHrefForComparison(rawHref: String): String {
+    val trimmed = rawHref.trim().replace(Regex("^/+"), "")
+    val withoutFragment = trimmed.substringBefore('#')
+    val withoutQuery = withoutFragment.substringBefore('?')
+
+    return try {
+      URLDecoder.decode(withoutQuery, StandardCharsets.UTF_8.name())
+    } catch (_: Exception) {
+      withoutQuery
+    }
+  }
+
+  private fun isHrefRestricted(normalizedHref: String): Boolean {
+    val allowed = allowedHrefsSet ?: return false
+    return !allowed.contains(normalizedHref)
+  }
+
+  private fun resolveHrefFromLocation(location: LinkOrLocator): String? {
+    return when (location) {
+      is LinkOrLocator.Link -> location.link.href.toString()
+      is LinkOrLocator.Locator -> location.locator.href.toString()
+    }
+  }
+
+  private fun mapRequestedLocationToRestrictionAnchor(location: LinkOrLocator): LinkOrLocator {
+    val href = resolveHrefFromLocation(location) ?: return location
+    val normalizedHref = normalizeHrefForComparison(href)
+
+    if (!isHrefRestricted(normalizedHref)) {
+      pendingRestrictedTargetHref = null
+      return location
+    }
+
+    pendingRestrictedTargetHref = normalizedHref
+    return restrictedAnchorLocator?.let { LinkOrLocator.Locator(it) } ?: location
+  }
+
+  private fun emitRestrictedNavigation(href: String) {
+    val payload = Arguments.createMap().apply {
+      putString("href", href)
+    }
+    sendEvent(ReadiumViewManager.ON_RESTRICTED_NAVIGATION, payload)
+  }
+
+  private fun activateRestrictedNavigationIfNeeded(href: String) {
+    if (activeRestrictedHref == href) {
+      return
+    }
+
+    activeRestrictedHref = href
+    emitRestrictedNavigation(href)
+  }
+
+  private fun clearRestrictedNavigationIfNeeded() {
+    if (activeRestrictedHref == null) {
+      return
+    }
+
+    activeRestrictedHref = null
+    pendingRestrictedTargetHref = null
+    emitRestrictedNavigation("")
+  }
+
+  private fun handleLocatorAccess(locator: Locator) {
+    val rawHref = locator.href.toString()
+    val normalizedHref = normalizeHrefForComparison(rawHref)
+    lastKnownHref = normalizedHref
+
+    if (isHrefRestricted(normalizedHref)) {
+      activateRestrictedNavigationIfNeeded(pendingRestrictedTargetHref ?: normalizedHref)
+    } else {
+      clearRestrictedNavigationIfNeeded()
+    }
+  }
+
+  private fun reevaluateRestrictionForCurrentHref() {
+    val href = lastKnownHref ?: run {
+      clearRestrictedNavigationIfNeeded()
+      return
+    }
+
+    if (isHrefRestricted(href)) {
+      activateRestrictedNavigationIfNeeded(pendingRestrictedTargetHref ?: href)
+    } else {
+      clearRestrictedNavigationIfNeeded()
+    }
   }
 
   private fun isFragmentReadyForNavigation(frag: BaseReaderFragment): Boolean {
@@ -123,13 +273,12 @@ class ReadiumView(
   }
 
   fun addFragment(frag: BaseReaderFragment) {
-    if (isFragmentAdded) {
-      return
-    }
-
+    val hadFragment = isFragmentAdded
     fragment = frag
     isFragmentAdded = true
-    setupLayout()
+    if (!hadFragment) {
+      setupLayout()
+    }
     updatePageNumberVisibility(hidePageNumbers)
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
     lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
@@ -147,6 +296,7 @@ class ReadiumView(
 
     // Apply any pending location after the fragment is actually attached.
     post { applyPendingLocationIfAny() }
+    post { reevaluateRestrictionForCurrentHref() }
 
     // Ensure the fragment's view fills the container
     frag.view?.layoutParams = FrameLayout.LayoutParams(
@@ -160,10 +310,13 @@ class ReadiumView(
     frag.channel.receive(frag) { event ->
       when (event) {
         is ReaderViewModel.Event.LocatorUpdate -> {
+          handleLocatorAccess(event.locator)
           val payload = event.locator.toWritableMap()
           dispatch(ReadiumViewManager.ON_LOCATION_CHANGE, payload)
         }
         is ReaderViewModel.Event.PublicationReady -> {
+          publicationPositions = event.positions
+          recomputeRestrictionAnchorLocator()
           val payload = Arguments.createMap().apply {
             putArray("tableOfContents", event.tableOfContents.toWritableArray())
             putArray("positions", event.positions.map { it.toWritableMap() }.let { list ->
@@ -251,12 +404,14 @@ class ReadiumView(
       setupLayout()
     }
     applyPendingLocationIfAny()
+    reevaluateRestrictionForCurrentHref()
   }
 
   override fun onWindowVisibilityChanged(visibility: Int) {
     super.onWindowVisibilityChanged(visibility)
     if (visibility == View.VISIBLE) {
       applyPendingLocationIfAny()
+      reevaluateRestrictionForCurrentHref()
     }
   }
 

@@ -5,10 +5,13 @@
 RCT_EXPORT_VIEW_PROPERTY(file, NSDictionary *)
 RCT_EXPORT_VIEW_PROPERTY(location, NSDictionary *)
 RCT_EXPORT_VIEW_PROPERTY(preferences, NSString *)
+RCT_EXPORT_VIEW_PROPERTY(allowedHrefs, NSString *)
+RCT_EXPORT_VIEW_PROPERTY(paywallHTML, NSString *)
 RCT_EXPORT_VIEW_PROPERTY(hidePageNumbers, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(enableTapNavigation, BOOL)
 RCT_EXPORT_VIEW_PROPERTY(onLocationChange, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onPublicationReady, RCTDirectEventBlock)
+RCT_EXPORT_VIEW_PROPERTY(onRestrictedNavigation, RCTDirectEventBlock)
 RCT_EXPORT_VIEW_PROPERTY(onTap, RCTDirectEventBlock)
 
 @end
