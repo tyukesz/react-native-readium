@@ -13,15 +13,21 @@ import type { TapEvent } from './interfaces/TapEvent';
 type OnLocationChangeEvent = Readonly<Locator>;
 type OnPublicationReadyEvent = Readonly<PublicationReadyEvent>;
 type OnTapEvent = Readonly<TapEvent>;
+type OnRestrictedNavigationEvent = Readonly<{
+  href: string;
+}>;
 
 // Native component props interface
 export interface NativeProps extends ViewProps {
   file: File;
   preferences?: string;
+  allowedHrefs?: string;
+  paywallHTML?: string;
   hidePageNumbers?: boolean;
   enableTapNavigation?: boolean;
   onLocationChange?: DirectEventHandler<OnLocationChangeEvent>;
   onPublicationReady?: DirectEventHandler<OnPublicationReadyEvent>;
+  onRestrictedNavigation?: DirectEventHandler<OnRestrictedNavigationEvent>;
   onTap?: DirectEventHandler<OnTapEvent>;
 }
 

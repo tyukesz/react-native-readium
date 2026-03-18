@@ -31,6 +31,13 @@ class ReadiumView : UIView, Loggable {
   private let viewportTextExtractor = ViewportTextExtractor()
   private typealias SentenceEntry = SentenceIndexStore.SentenceEntry
   private let sentenceIndexStore = SentenceIndexStore()
+  private var loadRequestID: Int = 0
+  private var allowedHrefsSet: Set<String>? = nil
+  private var lastKnownHref: String? = nil
+  private var publicationPositions: [Locator] = []
+  private var restrictedAnchorLocator: Locator? = nil
+  private var activeRestrictedHref: String? = nil
+  private var pendingRestrictedTargetHref: String? = nil
 
   private var publicationPositionsByHref: [String: [Double]] = [:]
   private var publicationProgressionByPosition: [Int: (href: String, progression: Double, totalProgression: Double?)] = [:]
@@ -177,6 +184,9 @@ class ReadiumView : UIView, Loggable {
 
     let positionsResult = await publication.positions()
     if case .success(let positions) = positionsResult {
+      publicationPositions = positions
+      recomputeRestrictionAnchorLocator()
+
       var byHref: [String: [Double]] = [:]
       var entriesByHref: [String: [(position: Int, progression: Double?, totalProgression: Double?)]] = [:]
       var entriesByProgressionByHref: [String: [(progression: Double, position: Int, totalProgression: Double?)]] = [:]
@@ -404,6 +414,19 @@ class ReadiumView : UIView, Loggable {
       self.updatePreferences(preferences)
     }
   }
+  @objc var allowedHrefs: NSString? = nil {
+    didSet {
+      allowedHrefsSet = parseAllowedHrefs(allowedHrefs)
+      recomputeRestrictionAnchorLocator()
+      reevaluateRestrictionForCurrentHref()
+      reloadBookIfNeeded()
+    }
+  }
+  @objc var paywallHTML: NSString? = nil {
+    didSet {
+      reloadBookIfNeeded()
+    }
+  }
 
   @objc var hidePageNumbers: Bool = false {
     didSet {
@@ -418,6 +441,7 @@ class ReadiumView : UIView, Loggable {
 
   @objc var onLocationChange: RCTDirectEventBlock?
   @objc var onPublicationReady: RCTDirectEventBlock?
+  @objc var onRestrictedNavigation: RCTDirectEventBlock?
   @objc var onTap: RCTDirectEventBlock?
 
   func loadBook(
@@ -426,12 +450,20 @@ class ReadiumView : UIView, Loggable {
   ) {
     guard let rootViewController = UIApplication.shared.delegate?.window??.rootViewController else { return }
 
+    loadRequestID += 1
+    let requestID = loadRequestID
+    detachReaderViewControllerIfNeeded()
+
     self.readerService.buildViewController(
       url: url,
       bookId: url,
       location: location,
+      restriction: currentRestrictionConfiguration(),
       sender: rootViewController,
       completion: { vc in
+        guard self.loadRequestID == requestID else {
+          return
+        }
         self.addViewControllerAsSubview(vc)
         self.location = location
       }
@@ -448,9 +480,11 @@ class ReadiumView : UIView, Loggable {
       guard let navigator = self.readerViewController?.navigator else {
         return
       }
-      guard let locator = await self.getLocator() else {
+      guard let requestedLocator = await self.getLocator() else {
         return
       }
+
+      let locator = self.mapRequestedLocatorToRestrictionAnchor(requestedLocator)
 
       let currentLocation = navigator.currentLocation
       if let currentLocation, locator.hashValue == currentLocation.hashValue {
@@ -464,15 +498,71 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
+  private func reloadBookIfNeeded() {
+    guard let initialLocation = file?["initialLocation"] as? NSDictionary,
+          let url = file?["url"] as? String else {
+      if let url = file?["url"] as? String {
+        loadBook(url: url, location: nil)
+      }
+      return
+    }
+
+    loadBook(url: url, location: initialLocation)
+  }
+
+  private func detachReaderViewControllerIfNeeded() {
+    subscriptions.removeAll()
+    publicationPositions = []
+    restrictedAnchorLocator = nil
+    lastKnownHref = nil
+    activeRestrictedHref = nil
+    pendingRestrictedTargetHref = nil
+    guard let readerViewController else {
+      return
+    }
+
+    readerViewController.willMove(toParent: nil)
+    readerViewController.view.removeFromSuperview()
+    readerViewController.removeFromParent()
+    self.readerViewController = nil
+  }
+
   private func normalizeHref(_ href: String) -> String {
     return href.trimmingCharacters(in: .whitespacesAndNewlines)
       .replacingOccurrences(of: "^/+", with: "", options: .regularExpression)
   }
 
+  private func parseAllowedHrefs(_ raw: NSString?) -> Set<String>? {
+    guard let raw = raw as String? else {
+      return nil
+    }
+
+    let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+    if trimmed.isEmpty {
+      return nil
+    }
+
+    guard let data = trimmed.data(using: .utf8) else {
+      return nil
+    }
+
+    do {
+      let parsed = try JSONSerialization.jsonObject(with: data, options: [])
+      guard let hrefs = parsed as? [String] else {
+        return nil
+      }
+      return Set(hrefs.map { normalizedHrefForComparison($0) })
+    } catch {
+      log(.warning, "Failed to parse allowedHrefs: \(error)")
+      return nil
+    }
+  }
+
   private func normalizedHrefForComparison(_ href: String) -> String {
     let base = normalizeHref(href)
     let noFragment = base.components(separatedBy: "#").first ?? base
-    return noFragment.components(separatedBy: "?").first ?? noFragment
+    let noQuery = noFragment.components(separatedBy: "?").first ?? noFragment
+    return noQuery.removingPercentEncoding ?? noQuery
   }
 
   private func normalizedHrefForComparisonAnyURL(_ href: AnyURL) -> String {
@@ -482,6 +572,101 @@ class ReadiumView : UIView, Loggable {
   private func normalizeHrefAnyURL(_ href: AnyURL) -> String {
     // Readium 3.x uses `AnyURL` for Locator.href
     return normalizeHref(href.url.relativeString)
+  }
+
+  private func isHrefRestricted(_ href: String) -> Bool {
+    guard let allowed = allowedHrefsSet else {
+      return false
+    }
+
+    return !allowed.contains(href)
+  }
+
+  private func currentRestrictionConfiguration() -> PublicationRestrictionConfiguration? {
+    guard let allowedHrefsSet else {
+      return nil
+    }
+
+    return PublicationRestrictionConfiguration(
+      allowedHrefs: allowedHrefsSet,
+      paywallHTML: paywallHTML as String?
+    )
+  }
+
+  private func recomputeRestrictionAnchorLocator() {
+    guard let allowed = allowedHrefsSet, !publicationPositions.isEmpty else {
+      restrictedAnchorLocator = nil
+      return
+    }
+
+    restrictedAnchorLocator = publicationPositions.first(where: {
+      !allowed.contains(normalizedHrefForComparisonAnyURL($0.href))
+    })
+  }
+
+  private func mapRequestedLocatorToRestrictionAnchor(_ requested: Locator) -> Locator {
+    let requestedHref = normalizedHrefForComparisonAnyURL(requested.href)
+    if !isHrefRestricted(requestedHref) {
+      pendingRestrictedTargetHref = nil
+      return requested
+    }
+
+    pendingRestrictedTargetHref = requestedHref
+    return restrictedAnchorLocator ?? requested
+  }
+
+  private func emitRestrictedNavigation(_ href: String) {
+    onRestrictedNavigation?([
+      "href": href,
+    ])
+  }
+
+  private func activateRestrictedNavigationIfNeeded(href: String) {
+    guard activeRestrictedHref != href else {
+      return
+    }
+
+    activeRestrictedHref = href
+    emitRestrictedNavigation(href)
+  }
+
+  private func clearRestrictedNavigationIfNeeded() {
+    guard activeRestrictedHref != nil else {
+      return
+    }
+
+    activeRestrictedHref = nil
+    pendingRestrictedTargetHref = nil
+    emitRestrictedNavigation("")
+  }
+
+  private func handleLocatorAccess(_ locator: Locator) {
+    let href = normalizedHrefForComparisonAnyURL(locator.href)
+    lastKnownHref = href
+
+    if isHrefRestricted(href) {
+      activateRestrictedNavigationIfNeeded(href: pendingRestrictedTargetHref ?? href)
+    } else {
+      clearRestrictedNavigationIfNeeded()
+    }
+  }
+
+  private func reevaluateRestrictionForCurrentHref() {
+    let href = lastKnownHref ?? readerViewController?.navigator.currentLocation.map {
+      normalizedHrefForComparisonAnyURL($0.href)
+    }
+
+    guard let href else {
+      clearRestrictedNavigationIfNeeded()
+      return
+    }
+
+    lastKnownHref = href
+    if isHrefRestricted(href) {
+      activateRestrictedNavigationIfNeeded(href: pendingRestrictedTargetHref ?? href)
+    } else {
+      clearRestrictedNavigationIfNeeded()
+    }
   }
 
   private func getSentencesForHref(_ href: String) async -> [SentenceEntry] {
@@ -751,6 +936,7 @@ class ReadiumView : UIView, Loggable {
   private func addViewControllerAsSubview(_ vc: ReaderViewController) {
     vc.publisher.sink(
       receiveValue: { locator in
+        self.handleLocatorAccess(locator)
         self.onLocationChange?(locator.json)
       }
     )
@@ -771,6 +957,8 @@ class ReadiumView : UIView, Loggable {
     if (preferences != nil) {
       self.updatePreferences(preferences)
     }
+
+    reevaluateRestrictionForCurrentHref()
 
 
     guard
@@ -819,6 +1007,8 @@ class ReadiumView : UIView, Loggable {
       switch positionsResult {
       case .success(let positions):
         payload["positions"] = positions.map { $0.json }
+        self.publicationPositions = positions
+        self.recomputeRestrictionAnchorLocator()
 
         // Cache per-href discrete position boundaries for sentence progression snapping.
         var byHref: [String: [Double]] = [:]

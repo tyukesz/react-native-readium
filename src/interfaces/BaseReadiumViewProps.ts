@@ -20,7 +20,10 @@ export type BaseReadiumViewProps = {
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
   onPublicationReady?: (event: PublicationReadyEvent) => void;
+  onRestrictedNavigation?: (href: string) => void;
   onTap?: (event: TapEvent) => void;
+  allowedHrefs?: string[];
+  paywallHTML?: string;
   ref?: any;
   height?: number;
   width?: number;
