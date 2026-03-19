@@ -25,6 +25,7 @@ allows you to do things like:
 - Render an ebook view.
 - Register for location changes (as the user pages through the book).
 - Access publication metadata including table of contents, positions, and more via the `onPublicationReady` callback
+- Restrict chapter access with `allowedHrefs`, render a native paywall page with `paywallHTML`, and observe blocked navigation with `onRestrictedNavigation`
 - Control settings of the Reader. Things like:
   - Dark Mode, Light Mode, Sepia Mode
   - Font Size
@@ -119,6 +120,8 @@ Finally, install the pods:
 
 This release upgrades the Android native implementation to a newer Readium Kotlin Toolkit.
 Most apps won’t need code changes, but your **Android build configuration** might.
+
+This fork currently targets **Readium Kotlin Toolkit `3.1.2`** on Android.
 
 Requirements:
 - **JDK 17** is required to build the Android app (the library targets Java/Kotlin 17).
@@ -217,6 +220,87 @@ const MyComponent: React.FC = () => {
   );
 }
 ```
+
+### Restricting Access To Chapters
+
+You can restrict reading to a subset of spine resources with `allowedHrefs`.
+When the user reaches the first restricted chapter, the native reader serves a
+paywall XHTML page instead of the real chapter resource.
+
+```tsx
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  ReadiumView,
+  openPublicationHeadless,
+} from '@tyukesz/react-native-readium';
+import type { File } from '@tyukesz/react-native-readium';
+
+const MyRestrictedReader: React.FC<{ file: File }> = ({ file }) => {
+  const [allowedHrefs, setAllowedHrefs] = useState<string[]>();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadRestriction() {
+      const index = await openPublicationHeadless({
+        url: file.url,
+        
+        id: `restriction:${file.url}`,
+      });
+
+      const firstTwo = (index.readingOrder || [])
+        .map((item) => item.href)
+        .filter((href): href is string => !!href)
+        .slice(0, 2);
+
+      if (!cancelled) {
+        setAllowedHrefs(firstTwo);
+      }
+    }
+
+    loadRestriction();
+    return () => {
+      cancelled = true;
+    };
+  }, [file.url]);
+
+  const paywallHTML = useMemo(
+    () => `<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Subscription required</title>
+  </head>
+  <body>
+    <main>
+      <h1>Subscription required</h1>
+      <p>Continue reading with an active subscription.</p>
+    </main>
+  </body>
+</html>`,
+    []
+  );
+
+  return (
+    <ReadiumView
+      file={file}
+      allowedHrefs={allowedHrefs}
+      paywallHTML={paywallHTML}
+      onRestrictedNavigation={(href) => {
+        console.log('Restricted navigation:', href);
+      }}
+    />
+  );
+};
+```
+
+Notes:
+- `allowedHrefs` should contain normalized publication HREFs from the reading order, for example from `openPublicationHeadless()`.
+- `paywallHTML` is a full XHTML/HTML string rendered as the restricted chapter page.
+- `onRestrictedNavigation` fires with the restricted chapter `href`, and later with `''` when the reader leaves the restricted page.
+- This replaces the older overlay-based restriction approach. The paywall is now rendered natively as publication content.
 
 [Take a look at the Example App](https://github.com/5-stones/react-native-readium/blob/main/example/src/App.tsx) for a more complex usage example.
 
@@ -410,10 +494,13 @@ Returns the same shapes as `onPublicationReady`:
 | `file`     | [`File`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/File.ts)               | :x:                | A file object containing the path to the eBook file on disk. |
 | `location` | [`Locator`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/Locator.ts) \| [`Link`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/Link.ts)           | :white_check_mark: | A locator prop that allows you to externally control the location of the reader (e.g. Chapters or Bookmarks). <br/><br/>:warning: If you want to set the `location` of an ebook on initial load, you should use the `File.initialLocation` property (look at the `file` prop). See more [here](https://github.com/5-stones/react-native-readium/issues/16#issuecomment-1344128937) |
 | `preferences` | [`Partial<Preferences>`](https://github.com/readium/swift-toolkit/blob/main/docs/Guides/Navigator%20Preferences.md#appendix-preference-constraints)  | :white_check_mark: | An object that allows you to control various aspects of the reader's UI (epub only) |
+| `allowedHrefs` | `string[]` | :white_check_mark: | Restricts access to the provided publication HREFs. Chapters outside this allowlist are replaced by the paywall page. |
+| `paywallHTML` | `string` | :white_check_mark: | Native only. Full XHTML/HTML string rendered when the user reaches the first restricted chapter. |
 | `hidePageNumbers` | `boolean` | :white_check_mark: | Native only. When `true`, hides the bottom position/page label. |
 | `style`    | `ViewStyle`          | :white_check_mark: | A traditional style object. |
 | `onLocationChange` | `(locator: Locator) => void` | :white_check_mark: | A callback that fires whenever the location is changed (e.g. the user transitions to a new page)|
 | `onPublicationReady` | `(event: PublicationReadyEvent) => void` | :white_check_mark: | A callback that fires once the publication is loaded and provides access to the table of contents, positions, and metadata. See the [`PublicationReadyEvent`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/PublicationReady.ts) interface for details. |
+| `onRestrictedNavigation` | `(href: string) => void` | :white_check_mark: | Native only. Fires when the reader lands on a restricted chapter/paywall page. Emits the restricted `href`, then later `''` when the restriction state clears. |
 | `onTap` | `(event: TapEvent) => void` | :white_check_mark: | Native only. Fires when the reader view is tapped; provides `x`/`y` coordinates in view space (React Native points). See [`TapEvent`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/TapEvent.ts). |
 
 #### :warning: Web vs Native File URLs
