@@ -34,6 +34,11 @@ class ReaderViewController: UIViewController, Loggable {
       }
     }
   }
+  var disableTextSelection: Bool = false {
+    didSet {
+      applyTextSelectionPolicy()
+    }
+  }
 
   private lazy var tapGestureRecognizer: UITapGestureRecognizer = {
     let recognizer = UITapGestureRecognizer(target: self, action: #selector(handleViewTap(_:)))
@@ -118,6 +123,7 @@ class ReaderViewController: UIViewController, Loggable {
 
     configureNavigatorInteractions()
     view.addGestureRecognizer(tapGestureRecognizer)
+    applyTextSelectionPolicy()
   }
 
   override func willMove(toParent parent: UIViewController?) {
@@ -141,6 +147,21 @@ class ReaderViewController: UIViewController, Loggable {
 
   func setPositionLabelHidden(_ hidden: Bool) {
     positionLabel.isHidden = hidden
+  }
+
+  func applyReaderColors(backgroundColor: UIColor?, textColor: UIColor?) {
+    let resolvedBackgroundColor = backgroundColor ?? .white
+    let resolvedTintColor = textColor ?? .black
+
+    navigator.view.backgroundColor = resolvedBackgroundColor
+    view.backgroundColor = resolvedBackgroundColor
+    positionLabel.textColor = textColor ?? .darkGray
+
+    navigationController?.navigationBar.barTintColor = resolvedBackgroundColor
+    navigationController?.navigationBar.tintColor = resolvedTintColor
+    navigationController?.navigationBar.titleTextAttributes = [
+      NSAttributedString.Key.foregroundColor: resolvedTintColor,
+    ]
   }
 
   func updateNavigationBar(animated: Bool = true) {
@@ -285,6 +306,73 @@ class ReaderViewController: UIViewController, Loggable {
     navigatorInputObserverTokens.removeAll()
   }
 
+  private func applyTextSelectionPolicy() {
+    let script = Self.textSelectionPolicyScript(disabled: disableTextSelection)
+    let webViews = findWKWebViews(in: navigator.view)
+
+    guard !webViews.isEmpty else {
+      return
+    }
+
+    webViews.forEach { webView in
+      webView.evaluateJavaScript(script, completionHandler: nil)
+    }
+  }
+
+  private func findWKWebViews(in view: UIView?) -> [WKWebView] {
+    guard let view else {
+      return []
+    }
+
+    var webViews: [WKWebView] = []
+    func collect(in currentView: UIView) {
+      if let webView = currentView as? WKWebView {
+        webViews.append(webView)
+      }
+
+      currentView.subviews.forEach { collect(in: $0) }
+    }
+
+    collect(in: view)
+    return webViews
+  }
+
+  private static func textSelectionPolicyScript(disabled: Bool) -> String {
+    let disabledLiteral = disabled ? "true" : "false"
+    return
+      """
+      (function() {
+        var disabled = \(disabledLiteral);
+        var styleId = 'readium-disable-text-selection-style';
+        var css = 'html, body, body * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }';
+        var root = document.head || document.documentElement;
+
+        if (!root) {
+          return false;
+        }
+
+        var style = document.getElementById(styleId);
+        if (disabled) {
+          if (!style) {
+            style = document.createElement('style');
+            style.id = styleId;
+            root.appendChild(style);
+          }
+          style.textContent = css;
+
+          var selection = window.getSelection ? window.getSelection() : null;
+          if (selection && selection.removeAllRanges) {
+            selection.removeAllRanges();
+          }
+        } else if (style && style.parentNode) {
+          style.parentNode.removeChild(style);
+        }
+
+        return true;
+      })();
+      """
+  }
+
   @objc private func goBackward() {
     Task { [weak self] in
       await self?.navigateBackwardAnimated()
@@ -322,6 +410,7 @@ extension ReaderViewController: NavigatorDelegate {
   func navigator(_ navigator: Navigator, locationDidChange locator: Locator) {
     subject.send(locator)
     updatePositionLabel(with: locator)
+    applyTextSelectionPolicy()
   }
 
   func navigator(_ navigator: Navigator, presentExternalURL url: URL) {

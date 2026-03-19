@@ -151,6 +151,11 @@ class ReadiumViewManager(
     // iOS only - no-op on Android
   }
 
+  @ReactProp(name = "disableTextSelection", defaultBoolean = false)
+  fun setDisableTextSelection(view: ReadiumView, disableTextSelection: Boolean) {
+    view.updateTextSelectionDisabled(disableTextSelection)
+  }
+
   @ReactPropGroup(names = ["width", "height"], customType = "Style")
   fun setStyle(view: ReadiumView?, index: Int, value: Int) {
     if (view != null) {

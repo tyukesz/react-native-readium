@@ -19,6 +19,80 @@ private extension Comparable {
   }
 }
 
+private struct ReaderAppearancePreferences: Decodable {
+  let backgroundColor: String?
+  let textColor: String?
+}
+
+private extension Dictionary where Key == String, Value == Any {
+  mutating func adaptReadiumColorPreference(_ key: String) {
+    guard let cssColor = self[key] as? String else { return }
+    guard let uiColor = UIColor.readiumColor(from: cssColor) else { return }
+    guard let readiumColor = Color(uiColor: uiColor) else { return }
+    self[key] = readiumColor.rawValue
+  }
+}
+
+private extension Data {
+  func adaptingReadiumColorPreferences() -> Data {
+    guard
+      let jsonObject = try? JSONSerialization.jsonObject(with: self),
+      var json = jsonObject as? [String: Any]
+    else {
+      return self
+    }
+
+    json.adaptReadiumColorPreference("backgroundColor")
+    json.adaptReadiumColorPreference("textColor")
+
+    guard let adapted = try? JSONSerialization.data(withJSONObject: json) else {
+      return self
+    }
+
+    return adapted
+  }
+}
+
+private extension UIColor {
+  static func readiumColor(from cssColor: String?) -> UIColor? {
+    guard let cssColor else { return nil }
+
+    let trimmed = cssColor.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !trimmed.isEmpty else { return nil }
+
+    let normalized = trimmed.hasPrefix("#") ? String(trimmed.dropFirst()) : trimmed
+    let hex: String
+
+    switch normalized.count {
+    case 3:
+      hex = normalized.map { "\($0)\($0)" }.joined()
+    case 6, 8:
+      hex = normalized
+    default:
+      return nil
+    }
+
+    var value: UInt64 = 0
+    guard Scanner(string: hex).scanHexInt64(&value) else { return nil }
+
+    if hex.count == 8 {
+      return UIColor(
+        red: CGFloat((value & 0xFF000000) >> 24) / 255.0,
+        green: CGFloat((value & 0x00FF0000) >> 16) / 255.0,
+        blue: CGFloat((value & 0x0000FF00) >> 8) / 255.0,
+        alpha: CGFloat(value & 0x000000FF) / 255.0
+      )
+    }
+
+    return UIColor(
+      red: CGFloat((value & 0xFF0000) >> 16) / 255.0,
+      green: CGFloat((value & 0x00FF00) >> 8) / 255.0,
+      blue: CGFloat(value & 0x0000FF) / 255.0,
+      alpha: 1.0
+    )
+  }
+}
+
 
 class ReadiumView : UIView, Loggable {
   var readerService: ReaderService = ReaderService()
@@ -436,6 +510,11 @@ class ReadiumView : UIView, Loggable {
   @objc var enableTapNavigation: Bool = true {
     didSet {
       readerViewController?.enableTapNavigation = enableTapNavigation
+    }
+  }
+  @objc var disableTextSelection: Bool = false {
+    didSet {
+      readerViewController?.disableTextSelection = disableTextSelection
     }
   }
 
@@ -905,8 +984,19 @@ class ReadiumView : UIView, Loggable {
     }
 
     do {
-      let preferences = try JSONDecoder().decode(EPUBPreferences.self, from: Data(preferencesJson.utf8))
+      let preferencesData = Data(preferencesJson.utf8)
+      let navigatorPreferencesData = preferencesData.adaptingReadiumColorPreferences()
+      let preferences = try JSONDecoder().decode(EPUBPreferences.self, from: navigatorPreferencesData)
       navigator.submitPreferences(preferences)
+
+      let appearance = try? JSONDecoder().decode(
+        ReaderAppearancePreferences.self,
+        from: preferencesData
+      )
+      readerViewController?.applyReaderColors(
+        backgroundColor: UIColor.readiumColor(from: appearance?.backgroundColor),
+        textColor: UIColor.readiumColor(from: appearance?.textColor)
+      )
     } catch {
       print(error)
       print("TODO: handle error. Skipping preferences due to thrown exception")
@@ -944,6 +1034,7 @@ class ReadiumView : UIView, Loggable {
 
     readerViewController = vc
     readerViewController?.enableTapNavigation = enableTapNavigation
+    readerViewController?.disableTextSelection = disableTextSelection
     readerViewController?.onTap = { [weak self] point in
       self?.onTap?([
         "x": point.x,

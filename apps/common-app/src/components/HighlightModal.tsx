@@ -1,12 +1,23 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import {
+  clearHighlight as clearNativeHighlight,
+  getChapterSentencePage,
+  getSentenceIndexFromProgression,
+  getVisibleTextRange,
+  highlightLocator,
+  highlightSentence,
+  navigateTo,
+} from '@tyukesz/react-native-readium';
+import type { Link, Locator } from '@tyukesz/react-native-readium';
 
 export type VisibleRange = {
   href: string;
@@ -23,51 +34,207 @@ export type SentencePreviewItem = {
 
 interface HighlightModalProps {
   visible: boolean;
-  isNative: boolean;
-  highlightHref: string;
-  sentenceIndexText: string;
-  progressionText: string;
-  sentenceCount: number | null;
-  isLoadingSentences: boolean;
-  isLoadingPreview: boolean;
-  visibleRange: VisibleRange | null;
-  sentencePreview: SentencePreviewItem[] | null;
   onClose: () => void;
-  onApply: () => void;
-  onApplyLocator: () => void;
-  onClear: () => void;
-  onChangeHighlightHref: (value: string) => void;
-  onChangeSentenceIndexText: (value: string) => void;
-  onChangeProgressionText: (value: string) => void;
-  onUseCurrentChapter: () => void;
-  onLoadSentences: () => void;
-  onLoadPreview: () => void;
-  onJumpToProgression: () => void;
+  readerRef: React.RefObject<any>;
+  location?: Locator | Link;
 }
 
 export const HighlightModal: React.FC<HighlightModalProps> = ({
   visible,
-  isNative,
-  highlightHref,
-  sentenceIndexText,
-  progressionText,
-  sentenceCount,
-  isLoadingSentences,
-  isLoadingPreview,
-  visibleRange,
-  sentencePreview,
   onClose,
-  onApply,
-  onApplyLocator,
-  onClear,
-  onChangeHighlightHref,
-  onChangeSentenceIndexText,
-  onChangeProgressionText,
-  onUseCurrentChapter,
-  onLoadSentences,
-  onLoadPreview,
-  onJumpToProgression,
+  readerRef,
+  location,
 }) => {
+  const isNative = Platform.OS !== 'web';
+  const [highlightHref, setHighlightHref] = useState<string>('');
+  const [sentenceIndexText, setSentenceIndexText] = useState<string>('0');
+  const [sentenceCount, setSentenceCount] = useState<number | null>(null);
+  const [isLoadingSentences, setIsLoadingSentences] = useState<boolean>(false);
+  const [sentencePreview, setSentencePreview] = useState<
+    SentencePreviewItem[] | null
+  >(null);
+  const [isLoadingPreview, setIsLoadingPreview] = useState<boolean>(false);
+  const [visibleRange, setVisibleRange] = useState<VisibleRange | null>(null);
+  const [progressionText, setProgressionText] = useState<string>('0');
+
+  const useCurrentChapter = useCallback(() => {
+    const currentHref =
+      location && 'href' in location ? (location.href as string) : '';
+    if (currentHref) {
+      setHighlightHref(currentHref);
+    }
+  }, [location]);
+
+  const applyHighlight = useCallback(async () => {
+    const href = highlightHref.trim();
+    if (!href) return;
+
+    const idx = Number(sentenceIndexText);
+    if (!Number.isInteger(idx) || idx < 0) return;
+
+    highlightSentence(readerRef, {
+      href,
+      sentenceIndex: idx,
+      style: {
+        tint: '#f4090d',
+        isActive: false,
+      },
+    });
+
+    if (isNative) {
+      try {
+        const page = await getChapterSentencePage(readerRef, {
+          href,
+          offset: idx,
+          limit: 1,
+        });
+        const item = page.items?.[0];
+        if (!item) {
+          throw new Error('Failed to resolve sentence page item');
+        }
+
+        if (item.locator) {
+          console.log('navigateTo locator', item);
+          await navigateTo(readerRef, item.locator);
+        }
+      } catch (e) {
+        console.log('navigateTo failed', e);
+      }
+    }
+
+    onClose();
+  }, [highlightHref, sentenceIndexText, readerRef, isNative, onClose]);
+
+  const applyHighlightLocator = useCallback(async () => {
+    const href = highlightHref.trim();
+    if (!href) return;
+
+    const idx = Number(sentenceIndexText);
+    if (!Number.isInteger(idx) || idx < 0) return;
+
+    if (!isNative) return;
+
+    try {
+      const page = await getChapterSentencePage(readerRef, {
+        href,
+        offset: idx,
+        limit: 1,
+      });
+      const item = page.items?.[0];
+      if (!item?.locator) {
+        throw new Error('Failed to resolve locator for sentence');
+      }
+
+      console.log('highlightLocator', item.locator);
+
+      highlightLocator(readerRef, item.locator, {
+        tint: '#0953f4',
+        isActive: false,
+      });
+
+      await navigateTo(readerRef, item.locator);
+    } catch (e) {
+      console.log('highlightLocator failed', e);
+    }
+
+    onClose();
+  }, [highlightHref, sentenceIndexText, isNative, onClose, readerRef]);
+
+  const clearHighlightAction = useCallback(() => {
+    clearNativeHighlight(readerRef);
+    onClose();
+  }, [readerRef, onClose]);
+
+  const loadSentencesCount = useCallback(async () => {
+    const href = highlightHref.trim();
+    if (!href) return;
+    if (!isNative) {
+      setSentenceCount(null);
+      return;
+    }
+
+    try {
+      setIsLoadingSentences(true);
+      const page = await getChapterSentencePage(readerRef, {
+        href,
+      });
+      console.log('loadSentencesCount', page);
+      setSentenceCount(page.total);
+    } catch (e) {
+      console.log('getChapterSentences failed', e);
+      setSentenceCount(null);
+    } finally {
+      setIsLoadingSentences(false);
+    }
+  }, [highlightHref, isNative, readerRef]);
+
+  const loadSentencePreview = useCallback(async () => {
+    if (!isNative) return;
+
+    try {
+      setIsLoadingPreview(true);
+      const res = await getVisibleTextRange(readerRef, {
+        includeText: true,
+        source: 'viewport',
+      });
+      console.log({ start: res?.start, end: res?.end, text: res?.text });
+      setVisibleRange(res);
+    } catch (e) {
+      console.log('loadSentencePreview failed', e);
+      setSentencePreview(null);
+      setVisibleRange(null);
+    } finally {
+      setIsLoadingPreview(false);
+    }
+  }, [isNative, readerRef]);
+
+  const jumpToProgression = useCallback(async () => {
+    const href = highlightHref.trim();
+    if (!href) return;
+    const p = Number(progressionText);
+    if (!Number.isFinite(p)) return;
+
+    if (!isNative) return;
+    try {
+      const idx = await getSentenceIndexFromProgression(readerRef, {
+        href,
+        progression: p,
+      });
+      console.log({ href, p, idx });
+      setSentenceIndexText(String(idx));
+      highlightSentence(readerRef, { href, sentenceIndex: idx });
+
+      const page = await getChapterSentencePage(readerRef, {
+        href,
+        offset: idx,
+        limit: 1,
+      });
+      const item = page.items?.[0];
+      if (item?.locator) {
+        await navigateTo(readerRef, item.locator);
+      }
+    } catch (e) {
+      console.log('getSentenceIndexFromProgression failed', e);
+    }
+  }, [highlightHref, progressionText, isNative, readerRef]);
+
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
+
+    const currentHref =
+      location && 'href' in location ? (location.href as string) : '';
+    setHighlightHref((prev) => prev || currentHref);
+    setSentenceCount(null);
+    setSentencePreview(null);
+  }, [visible, location]);
+
+  useEffect(() => {
+    if (!visible) return;
+    setSentencePreview(null);
+  }, [highlightHref, visible]);
+
   return (
     <Modal
       visible={visible}
@@ -82,7 +249,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           <Text style={styles.modalLabel}>Chapter href</Text>
           <TextInput
             value={highlightHref}
-            onChangeText={onChangeHighlightHref}
+            onChangeText={setHighlightHref}
             placeholder="e.g. /OPS/chapter-1.xhtml"
             placeholderTextColor="#777"
             autoCapitalize="none"
@@ -91,12 +258,12 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           />
 
           <View style={styles.modalRowLeft}>
-            <Pressable onPress={onUseCurrentChapter} style={styles.modalChip}>
+            <Pressable onPress={useCurrentChapter} style={styles.modalChip}>
               <Text style={styles.modalChipText}>Use current chapter</Text>
             </Pressable>
 
             <Pressable
-              onPress={onLoadSentences}
+              onPress={loadSentencesCount}
               style={styles.modalChip}
               disabled={isLoadingSentences || !isNative}
             >
@@ -110,7 +277,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
             </Pressable>
 
             <Pressable
-              onPress={onLoadPreview}
+              onPress={loadSentencePreview}
               style={styles.modalChip}
               disabled={isLoadingPreview || !isNative}
             >
@@ -144,7 +311,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           <Text style={styles.modalLabel}>Sentence index (0-based)</Text>
           <TextInput
             value={sentenceIndexText}
-            onChangeText={onChangeSentenceIndexText}
+            onChangeText={setSentenceIndexText}
             keyboardType="number-pad"
             style={styles.modalInput}
           />
@@ -152,14 +319,14 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           <Text style={styles.modalLabel}>Start from progression (0..1)</Text>
           <TextInput
             value={progressionText}
-            onChangeText={onChangeProgressionText}
+            onChangeText={setProgressionText}
             keyboardType="decimal-pad"
             style={styles.modalInput}
           />
 
           <View style={styles.modalRowLeft}>
             <Pressable
-              onPress={onJumpToProgression}
+              onPress={jumpToProgression}
               style={styles.modalChip}
               disabled={!isNative}
             >
@@ -168,19 +335,19 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           </View>
 
           <View style={styles.modalRow}>
-            <Pressable onPress={onClear} style={styles.modalButton}>
+            <Pressable onPress={clearHighlightAction} style={styles.modalButton}>
               <Text style={styles.actionButtonText}>Clear</Text>
             </Pressable>
             <Pressable onPress={onClose} style={styles.modalButton}>
               <Text style={styles.actionButtonText}>Cancel</Text>
             </Pressable>
             <Pressable
-              onPress={onApply}
+              onPress={applyHighlight}
               style={[styles.modalButton, styles.modalButtonPrimary]}
             >
               <Text style={styles.modalPrimaryButtonText}>Highlight (Index)</Text>
             </Pressable>
-            <Pressable onPress={onApplyLocator} style={styles.modalButton}>
+            <Pressable onPress={applyHighlightLocator} style={styles.modalButton}>
               <Text style={styles.actionButtonText}>Highlight (Locator)</Text>
             </Pressable>
           </View>

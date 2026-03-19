@@ -25,6 +25,7 @@ export interface NativeProps extends ViewProps {
   paywallHTML?: string;
   hidePageNumbers?: boolean;
   enableTapNavigation?: boolean;
+  disableTextSelection?: boolean;
   onLocationChange?: DirectEventHandler<OnLocationChangeEvent>;
   onPublicationReady?: DirectEventHandler<OnPublicationReadyEvent>;
   onRestrictedNavigation?: DirectEventHandler<OnRestrictedNavigationEvent>;
