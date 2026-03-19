@@ -17,6 +17,12 @@ export type BaseReadiumViewProps = {
    * @platform ios
    */
   enableTapNavigation?: boolean;
+  /**
+   * Disables text selection in the native EPUB reader when set to true.
+   * @default false
+   * @platform ios android
+   */
+  disableTextSelection?: boolean;
   style?: ViewStyle;
   onLocationChange?: (locator: Locator) => void;
   onPublicationReady?: (event: PublicationReadyEvent) => void;

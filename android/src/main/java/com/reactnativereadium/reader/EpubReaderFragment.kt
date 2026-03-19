@@ -6,9 +6,11 @@
 
 package com.reactnativereadium.reader
 
+import android.graphics.Color
 import android.os.Bundle
 import android.view.*
 import android.view.accessibility.AccessibilityManager
+import android.webkit.WebView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.fragment.app.commitNow
 import androidx.lifecycle.ViewModelProvider
@@ -51,6 +53,8 @@ class EpubReaderFragment : VisualReaderFragment() {
     private var initialHighlightRangeJsonString: String? = null
     private var initialHighlightSentenceJsonString: String? = null
     private var initialHighlightLocatorJsonString: String? = null
+    private var isTextSelectionDisabled = false
+    private var readerBackgroundColor: Int = Color.WHITE
 
     private lateinit var userPreferences: EpubPreferences
     private lateinit var sentenceIndexProvider: SentenceIndexProvider
@@ -119,6 +123,141 @@ class EpubReaderFragment : VisualReaderFragment() {
       initialHighlightLocatorJsonString?.let { applyHighlightLocatorFromJsonString(it) }
     }
 
+    fun setTextSelectionDisabled(disabled: Boolean) {
+      isTextSelectionDisabled = disabled
+      applyTextSelectionPolicy()
+    }
+
+    fun reapplyTextSelectionPolicyIfNeeded() {
+      if (!isTextSelectionDisabled) {
+        return
+      }
+
+      applyTextSelectionPolicy()
+    }
+
+    private fun applyTextSelectionPolicy() {
+      if (!this::navigatorFragment.isInitialized) {
+        return
+      }
+
+      val root = navigatorFragment.view ?: view ?: return
+
+      root.post {
+        findWebViews(navigatorFragment.view ?: view).forEach { webView ->
+          webView.evaluateJavascript(buildTextSelectionPolicyJs(isTextSelectionDisabled), null)
+        }
+      }
+    }
+
+    private fun findWebViews(root: View?): List<WebView> {
+      if (root == null) return emptyList()
+
+      val all = mutableListOf<WebView>()
+      fun collect(view: View?) {
+        if (view == null) return
+        if (view is WebView) {
+          all.add(view)
+          return
+        }
+        if (view is ViewGroup) {
+          for (i in 0 until view.childCount) {
+            collect(view.getChildAt(i))
+          }
+        }
+      }
+
+      collect(root)
+      return all
+    }
+
+    private fun buildTextSelectionPolicyJs(disabled: Boolean): String {
+      val disabledLiteral = if (disabled) "true" else "false"
+      return """
+        (function() {
+          var disabled = $disabledLiteral;
+          var styleId = 'readium-disable-text-selection-style';
+          var css = 'html, body, body * { -webkit-user-select: none !important; user-select: none !important; -webkit-touch-callout: none !important; }';
+          var root = document.head || document.documentElement;
+
+          if (!root) {
+            return false;
+          }
+
+          var style = document.getElementById(styleId);
+          if (disabled) {
+            if (!style) {
+              style = document.createElement('style');
+              style.id = styleId;
+              root.appendChild(style);
+            }
+            style.textContent = css;
+
+            var selection = window.getSelection ? window.getSelection() : null;
+            if (selection && selection.removeAllRanges) {
+              selection.removeAllRanges();
+            }
+          } else if (style && style.parentNode) {
+            style.parentNode.removeChild(style);
+          }
+
+          return true;
+        })();
+      """.trimIndent()
+    }
+
+    private fun applyReaderBackgroundColor() {
+      val rootView = view ?: return
+
+      rootView.setBackgroundColor(readerBackgroundColor)
+      binding.root.setBackgroundColor(readerBackgroundColor)
+      binding.fragmentReaderContainer.setBackgroundColor(readerBackgroundColor)
+      if (this::navigatorFragment.isInitialized) {
+        navigatorFragment.view?.setBackgroundColor(readerBackgroundColor)
+      }
+    }
+
+    private fun resolveReaderBackgroundColor(serialisedPreferences: String): Int {
+      val json = runCatching { JSONObject(serialisedPreferences) }.getOrNull()
+        ?: return Color.WHITE
+      val rawColor = json.opt("backgroundColor") ?: return Color.WHITE
+
+      if (rawColor is Number) {
+        return rawColor.toInt()
+      }
+
+      val parsedColor = rawColor.toString().trim()
+      if (parsedColor.isEmpty()) {
+        return Color.WHITE
+      }
+
+      return runCatching { Color.parseColor(parsedColor) }
+        .getOrElse { Color.WHITE }
+    }
+
+    private fun adaptPreferencesJsonForAndroidSerializer(serialisedPreferences: String): String {
+      val json = runCatching { JSONObject(serialisedPreferences) }.getOrNull()
+        ?: return serialisedPreferences
+
+      listOf("backgroundColor", "textColor").forEach { key ->
+        val rawValue = json.opt(key) ?: return@forEach
+        if (rawValue is Number) {
+          return@forEach
+        }
+
+        val parsedColor = rawValue.toString().trim()
+        if (parsedColor.isEmpty()) {
+          json.remove(key)
+          return@forEach
+        }
+
+        runCatching { Color.parseColor(parsedColor) }
+          .onSuccess { json.put(key, it) }
+      }
+
+      return json.toString()
+    }
+
     fun initFactory(
       publication: Publication,
       initialLocation: Locator?
@@ -131,16 +270,21 @@ class EpubReaderFragment : VisualReaderFragment() {
     }
 
     fun updatePreferencesFromJsonString(serialisedPreferences: String) {
-      userPreferences = preferencesSerializer.deserialize(serialisedPreferences)
+      val adaptedPreferences = adaptPreferencesJsonForAndroidSerializer(serialisedPreferences)
+
+      userPreferences = preferencesSerializer.deserialize(adaptedPreferences)
+      readerBackgroundColor = resolveReaderBackgroundColor(serialisedPreferences)
       if (this::sentenceIndexProvider.isInitialized) {
         sentenceIndexProvider.clearCache()
       }
+
+      applyReaderBackgroundColor()
 
       if (this::navigator.isInitialized && navigator is EpubNavigatorFragment) {
         (navigator as EpubNavigatorFragment).submitPreferences(userPreferences)
         initialPreferencesJsonString = null
       } else {
-        initialPreferencesJsonString = serialisedPreferences
+        initialPreferencesJsonString = adaptedPreferences
       }
     }
 
@@ -905,12 +1049,14 @@ class EpubReaderFragment : VisualReaderFragment() {
         applyPendingHighlightRangeIfNeeded()
         applyPendingHighlightSentenceIfNeeded()
         applyPendingHighlightLocatorIfNeeded()
+        reapplyTextSelectionPolicyIfNeeded()
 
         return view
     }
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+      applyReaderBackgroundColor()
     }
 
     override fun onResume() {
@@ -931,6 +1077,8 @@ class EpubReaderFragment : VisualReaderFragment() {
             userPreferences.plus(EpubPreferences(scroll = null))
         }
         (navigator as? EpubNavigatorFragment)?.submitPreferences(userPreferences)
+        applyReaderBackgroundColor()
+        reapplyTextSelectionPolicyIfNeeded()
     }
 
     companion object {

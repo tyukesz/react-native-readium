@@ -1,3 +1,7 @@
+# THIS IS A FORKED VERSION WITHOUT SUPORT FOR COMUNITY USE!
+
+<hr />
+
 # @tyukesz/react-native-readium
 
 [![NPM version](https://img.shields.io/npm/v/%40tyukesz%2Freact-native-readium.svg?color=success&label=npm%20package&logo=npm)](https://www.npmjs.com/package/@tyukesz/react-native-readium)
@@ -497,6 +501,7 @@ Returns the same shapes as `onPublicationReady`:
 | `allowedHrefs` | `string[]` | :white_check_mark: | Restricts access to the provided publication HREFs. Chapters outside this allowlist are replaced by the paywall page. |
 | `paywallHTML` | `string` | :white_check_mark: | Native only. Full XHTML/HTML string rendered when the user reaches the first restricted chapter. |
 | `hidePageNumbers` | `boolean` | :white_check_mark: | Native only. When `true`, hides the bottom position/page label. |
+| `disableTextSelection` | `boolean` | :white_check_mark: | Native only. When `true`, disables text selection in the EPUB reader. Defaults to `false`. |
 | `style`    | `ViewStyle`          | :white_check_mark: | A traditional style object. |
 | `onLocationChange` | `(locator: Locator) => void` | :white_check_mark: | A callback that fires whenever the location is changed (e.g. the user transitions to a new page)|
 | `onPublicationReady` | `(event: PublicationReadyEvent) => void` | :white_check_mark: | A callback that fires once the publication is loaded and provides access to the table of contents, positions, and metadata. See the [`PublicationReadyEvent`](https://github.com/5-stones/react-native-readium/blob/main/src/interfaces/PublicationReady.ts) interface for details. |

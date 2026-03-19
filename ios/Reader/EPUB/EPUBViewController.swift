@@ -37,14 +37,10 @@ class EPUBViewController: ReaderViewController {
 
     internal func setUIColor(for theme: Theme) {
       let colors = AssociatedColors.getColors(for: theme)
-
-      navigator.view.backgroundColor = colors.mainColor
-      view.backgroundColor = colors.mainColor
-      //
-      navigationController?.navigationBar.barTintColor = colors.mainColor
-      navigationController?.navigationBar.tintColor = colors.textColor
-
-      navigationController?.navigationBar.titleTextAttributes = [NSAttributedString.Key.foregroundColor: colors.textColor]
+      applyReaderColors(
+        backgroundColor: colors.mainColor,
+        textColor: colors.textColor
+      )
     }
 
     override var currentBookmark: Bookmark? {

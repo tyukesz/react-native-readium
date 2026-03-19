@@ -47,6 +47,7 @@ class ReadiumView(
   var lateInitHighlightSentenceJson: String? = null
   var lateInitHighlightLocatorJson: String? = null
   var hidePageNumbers: Boolean = false
+  var disableTextSelection: Boolean = false
   var paywallHTML: String? = null
   private var pendingLocation: LinkOrLocator? = null
   private var frameCallback: Choreographer.FrameCallback? = null
@@ -280,6 +281,7 @@ class ReadiumView(
       setupLayout()
     }
     updatePageNumberVisibility(hidePageNumbers)
+    updateTextSelectionDisabled(disableTextSelection)
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
     lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
     lateInitHighlightSentenceJson?.let { updateHighlightSentenceFromJsonString(it) }
@@ -311,6 +313,9 @@ class ReadiumView(
       when (event) {
         is ReaderViewModel.Event.LocatorUpdate -> {
           handleLocatorAccess(event.locator)
+          if (disableTextSelection) {
+            (fragment as? EpubReaderFragment)?.reapplyTextSelectionPolicyIfNeeded()
+          }
           val payload = event.locator.toWritableMap()
           dispatch(ReadiumViewManager.ON_LOCATION_CHANGE, payload)
         }
@@ -336,6 +341,11 @@ class ReadiumView(
   fun updatePageNumberVisibility(hide: Boolean) {
     hidePageNumbers = hide
     (fragment as? VisualReaderFragment)?.setPositionLabelHidden(hide)
+  }
+
+  fun updateTextSelectionDisabled(disabled: Boolean) {
+    disableTextSelection = disabled
+    (fragment as? EpubReaderFragment)?.setTextSelectionDisabled(disabled)
   }
 
   private fun sendEvent(eventName: String, payload: WritableMap?) {
