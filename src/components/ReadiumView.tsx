@@ -13,7 +13,10 @@ import type {
   Dimensions,
   Preferences,
 } from '../interfaces';
-import { getWidthOrHeightValue as dimension } from '../utils';
+import {
+  getWidthOrHeightValue as dimension,
+  mapPreferencesToNavigator,
+} from '../utils';
 import { BaseReadiumView } from './BaseReadiumView';
 import { Commands } from '../ReadiumViewNativeComponent';
 
@@ -125,10 +128,9 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       }
     }, [forwardedRef, hasDefaultRef, defaultRef]);
 
-    const stringifiedPreferences = useMemo(
-      () => JSON.stringify(preferences),
-      [preferences]
-    );
+    const stringifiedPreferences = useMemo(() => {
+      return JSON.stringify(mapPreferencesToNavigator(preferences));
+    }, [preferences]);
 
     const stringifiedAllowedHrefs = useMemo(() => {
       if (allowedHrefs === undefined) {
