@@ -1,9 +1,4 @@
-import React, {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   StyleSheet,
   View,
@@ -44,6 +39,8 @@ export interface ReaderProps {
   onTocChange?: (toc: Link[]) => void;
   /** Example mode: only first two readingOrder chapters are allowed */
   limitToFirstTwoChapters?: boolean;
+  /** Name of a local epub bundled in app assets (e.g. "ferfi.epub") */
+  localEpubName?: string;
 }
 
 export const Reader: React.FC<ReaderProps> = ({
@@ -54,14 +51,16 @@ export const Reader: React.FC<ReaderProps> = ({
   onOpenToc,
   onTocChange,
   limitToFirstTwoChapters = false,
+  localEpubName,
 }) => {
   const { file, isLoading } = useEpubFile({
     epubUrl,
     epubPath,
     initialLocation,
-    useFerfiEpub: true,
+    localEpubName,
   });
-  const { location, setLocation } = useExternalLocation(externalLocation);
+  const { location: externalNav } = useExternalLocation(externalLocation);
+  const [currentLocation, setCurrentLocation] = useState<Locator>();
   const [preferences, setPreferences] = useState<ReadiumProps['preferences']>({
     theme: 'dark',
   });
@@ -237,7 +236,7 @@ export const Reader: React.FC<ReaderProps> = ({
             <ReadiumView
               ref={ref}
               file={file}
-              location={location}
+              location={externalNav}
               disableTextSelection
               preferences={preferences}
               allowedHrefs={limitToFirstTwoChapters ? allowedHrefs : undefined}
@@ -245,7 +244,7 @@ export const Reader: React.FC<ReaderProps> = ({
               hidePageNumbers={true}
               onLocationChange={(locator: Locator) => {
                 console.log('onLocationChange', locator);
-                setLocation(locator);
+                setCurrentLocation(locator);
               }}
               onRestrictedNavigation={(href: string) => {
                 console.log('restricted navigation', href);
@@ -272,7 +271,7 @@ export const Reader: React.FC<ReaderProps> = ({
           visible={isHighlightModalVisible}
           onClose={() => setIsHighlightModalVisible(false)}
           readerRef={ref}
-          location={location}
+          location={currentLocation}
         />
       </View>
     );

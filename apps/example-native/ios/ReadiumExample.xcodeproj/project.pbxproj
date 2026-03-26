@@ -14,7 +14,6 @@
 		52EE71AE2D77A5F200617F39 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 52EE71AC2D77A5F200617F39 /* AppDelegate.swift */; };
 		5D1EE602EDE6F8E6A11D067C /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 5132B95C75527C78BB94579A /* PrivacyInfo.xcprivacy */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		A1F0F0D9D1B2486B00F3AF11 /* ferfi.epub in Resources */ = {isa = PBXBuildFile; fileRef = A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */; };
 		E461B59F65233381FD4757D0 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 0F7A153113BA277AD9F4CA21 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
@@ -48,7 +47,6 @@
 		5132B95C75527C78BB94579A /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = ReadiumExample/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		52EE71AC2D77A5F200617F39 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = ReadiumExample/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; name = ferfi.epub; path = "../../common-app/src/hooks/ferfi.epub"; sourceTree = SOURCE_ROOT; };
 		B5F4D734618153BAFE0DA839 /* Pods-ReadiumExample.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ReadiumExample.debug.xcconfig"; path = "Target Support Files/Pods-ReadiumExample/Pods-ReadiumExample.debug.xcconfig"; sourceTree = "<group>"; };
 		C09FB98F711B70679162A129 /* Pods-ReadiumExample.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-ReadiumExample.release.xcconfig"; path = "Target Support Files/Pods-ReadiumExample/Pods-ReadiumExample.release.xcconfig"; sourceTree = "<group>"; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
@@ -157,7 +155,6 @@
 		EFB246D809604331A20C1ABD /* Resources */ = {
 			isa = PBXGroup;
 			children = (
-				A1F0F0D8D1B2486B00F3AF11 /* ferfi.epub */,
 			);
 			name = Resources;
 			sourceTree = "<group>";
@@ -195,6 +192,7 @@
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
 				EA21C5771E4FF2B1C3C3D90B /* [CP] Copy Pods Resources */,
 				26BF0D697B72BA027EE0951E /* [CP] Embed Pods Frameworks */,
+				A1EPUB001000000000000001 /* Copy Epubs */,
 			);
 			buildRules = (
 			);
@@ -305,7 +303,6 @@
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
 				E461B59F65233381FD4757D0 /* PrivacyInfo.xcprivacy in Resources */,
-				A1F0F0D9D1B2486B00F3AF11 /* ferfi.epub in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -482,7 +479,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export RCT_METRO_PORT=\"${RCT_METRO_PORT:=8081}\"\necho \"export RCT_METRO_PORT=${RCT_METRO_PORT}\" > \"${SRCROOT}/../node_modules/react-native/scripts/.packager.env\"\nif [ -z \"${RCT_NO_LAUNCH_PACKAGER+xxx}\" ] ; then\n  if nc -w 5 -z localhost ${RCT_METRO_PORT} ; then\n    if ! curl -s \"http://localhost:${RCT_METRO_PORT}/status\" | grep -q \"packager-status:running\" ; then\n      echo \"Port ${RCT_METRO_PORT} already in use, packager is either not running or not running correctly\"\n      exit 2\n    fi\n  else\n    open \"$SRCROOT/../node_modules/react-native/scripts/launchPackager.command\" || echo \"Can't start packager automatically\"\n  fi\nfi\n";
+			shellScript = "export RCT_METRO_PORT=\"${RCT_METRO_PORT:=8082}\"\necho \"export RCT_METRO_PORT=${RCT_METRO_PORT}\" > \"${SRCROOT}/../node_modules/react-native/scripts/.packager.env\"\nif [ -z \"${RCT_NO_LAUNCH_PACKAGER+xxx}\" ] ; then\n  if nc -w 5 -z localhost ${RCT_METRO_PORT} ; then\n    if ! curl -s \"http://localhost:${RCT_METRO_PORT}/status\" | grep -q \"packager-status:running\" ; then\n      echo \"Port ${RCT_METRO_PORT} already in use, packager is either not running or not running correctly\"\n      exit 2\n    fi\n  else\n    open \"$SRCROOT/../node_modules/react-native/scripts/launchPackager.command\" || echo \"Can't start packager automatically\"\n  fi\nfi\n";
 			showEnvVarsInLog = 0;
 		};
 		FD10A7F122414F3F0027D42C /* Start Packager */ = {
@@ -501,8 +498,26 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export RCT_METRO_PORT=\"${RCT_METRO_PORT:=8081}\"\necho \"export RCT_METRO_PORT=${RCT_METRO_PORT}\" > \"${SRCROOT}/../node_modules/react-native/scripts/.packager.env\"\nif [ -z \"${RCT_NO_LAUNCH_PACKAGER+xxx}\" ] ; then\n  if nc -w 5 -z localhost ${RCT_METRO_PORT} ; then\n    if ! curl -s \"http://localhost:${RCT_METRO_PORT}/status\" | grep -q \"packager-status:running\" ; then\n      echo \"Port ${RCT_METRO_PORT} already in use, packager is either not running or not running correctly\"\n      exit 2\n    fi\n  else\n    open \"$SRCROOT/../node_modules/react-native/scripts/launchPackager.command\" || echo \"Can't start packager automatically\"\n  fi\nfi\n";
+			shellScript = "export RCT_METRO_PORT=\"${RCT_METRO_PORT:=8082}\"\necho \"export RCT_METRO_PORT=${RCT_METRO_PORT}\" > \"${SRCROOT}/../node_modules/react-native/scripts/.packager.env\"\nif [ -z \"${RCT_NO_LAUNCH_PACKAGER+xxx}\" ] ; then\n  if nc -w 5 -z localhost ${RCT_METRO_PORT} ; then\n    if ! curl -s \"http://localhost:${RCT_METRO_PORT}/status\" | grep -q \"packager-status:running\" ; then\n      echo \"Port ${RCT_METRO_PORT} already in use, packager is either not running or not running correctly\"\n      exit 2\n    fi\n  else\n    open \"$SRCROOT/../node_modules/react-native/scripts/launchPackager.command\" || echo \"Can't start packager automatically\"\n  fi\nfi\n";
 			showEnvVarsInLog = 0;
+		};
+		A1EPUB001000000000000001 /* Copy Epubs */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Copy Epubs";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "SRC_DIR=\"${SRCROOT}/../../resources/epubs\"\nif [ -d \"$SRC_DIR\" ]; then\n  find \"$SRC_DIR\" -name \"*.epub\" -exec cp {} \"${TARGET_BUILD_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}/\" \\;\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 

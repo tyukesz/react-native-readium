@@ -4,11 +4,11 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
+    "android": "adb reverse tcp:8081 tcp:${PORT:-8082} && react-native run-android --port ${PORT:-8082}",
     "android:ide": "open -a /Applications/Android\\ Studio.app ./android",
-    "ios": "react-native run-ios",
+    "ios": "react-native run-ios --port ${PORT:-8082} -- METRO_PORT=${PORT:-8082}",
     "ios:ide": "open ios/ReadiumExample.xcworkspace/",
-    "start": "react-native start --client-logs",
+    "start": "react-native start --client-logs --port ${PORT:-8082}",
     "clean": "react-native-clean-project"
   },
   "dependencies": {

@@ -6,7 +6,7 @@ import { Reader } from 'common-app';
 import type { Link, Locator } from '@tyukesz/react-native-readium';
 
 import { TableOfContentsScreen } from './TableOfContentsScreen';
-import { EPUB_URL, getEpubPath, INITIAL_LOCATION } from './readerConfig';
+import { EPUB_URL, getEpubPath, INITIAL_LOCATION, LOCAL_EPUB_NAME } from './readerConfig';
 
 type RootStackParamList = {
   Reader: undefined;
@@ -46,7 +46,8 @@ export default function App() {
               epubPath={epubPath}
               initialLocation={INITIAL_LOCATION}
               externalLocation={externalLocation}
-              limitToFirstTwoChapters={true}
+              limitToFirstTwoChapters={false}
+              localEpubName={LOCAL_EPUB_NAME}
               onTocChange={setToc}
               onOpenToc={() => handleOpenToc(navigation)}
             />
