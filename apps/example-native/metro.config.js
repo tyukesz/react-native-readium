@@ -10,6 +10,9 @@ const root = path.resolve(__dirname, '../..');
  * @type {import('@react-native/metro-config').MetroConfig}
  */
 const config = {
+  server: {
+    port: 8082,
+  },
   projectRoot: __dirname,
   watchFolders: [root],
 
