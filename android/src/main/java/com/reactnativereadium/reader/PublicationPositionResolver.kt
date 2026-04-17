@@ -29,6 +29,17 @@ class PublicationPositionResolver(
     }
   }
 
+  fun positionEntriesForHref(hrefKey: String): List<PositionEntry> {
+    val snapshot = snapshotForHref(hrefKey)
+    return snapshot.byProgression.map { entry ->
+      PositionEntry(
+        progression = entry.progression ?: 0.0,
+        position = entry.position,
+        totalProgression = entry.totalProgression ?: 0.0,
+      )
+    }
+  }
+
   fun progressionsForHref(hrefKey: String): List<Double> {
     return positions
       .asSequence()

@@ -2,17 +2,19 @@ import { NativeModules, Platform } from 'react-native';
 import type { RefObject } from 'react';
 import { requireReactTag } from './utils/requireReactTag';
 import type { Locator } from './interfaces';
+import {
+  getOrBuildSentenceIndex,
+  getSentenceIndexFromProgressionSync,
+} from './sentences';
+import type { SentenceSplitter } from './sentences';
+
+export type { SentenceSplitter } from './sentences';
+export { clearSentenceCache } from './sentences';
 
 export type HighlightRangeParams = {
   href: string;
   startProgression: number;
   endProgression: number;
-  style?: HighlightStyle;
-};
-
-export type HighlightSentenceParams = {
-  href: string;
-  sentenceIndex: number;
   style?: HighlightStyle;
 };
 
@@ -42,17 +44,13 @@ export type GetChapterSentencePageParams = {
   href: string;
   offset?: number;
   limit?: number;
+  splitter: SentenceSplitter;
 };
 
 export type GetSentenceIndexFromProgressionParams = {
   href: string;
   progression: number;
-};
-
-export type HighlightSentenceFromProgressionParams = {
-  href: string;
-  progression: number;
-  style?: HighlightStyle;
+  splitter: SentenceSplitter;
 };
 
 type NativeHighlightModule = {
@@ -75,40 +73,6 @@ type NativeHighlightModule = {
     locator: Locator,
     style: HighlightStyle
   ) => void;
-  highlightSentence?: (
-    reactTag: number,
-    href: string,
-    sentenceIndex: number
-  ) => void | Promise<void>;
-  highlightSentenceWithStyle?: (
-    reactTag: number,
-    href: string,
-    sentenceIndex: number,
-    style: HighlightStyle
-  ) => void | Promise<void>;
-  getChapterSentences?: (reactTag: number, href: string) => Promise<string[]>;
-  getChapterSentencePage?: (
-    reactTag: number,
-    href: string,
-    offset: number,
-    limit: number
-  ) => Promise<SentencePage>;
-  getSentenceIndexFromProgression?: (
-    reactTag: number,
-    href: string,
-    progression: number
-  ) => Promise<number>;
-  highlightSentenceFromProgression?: (
-    reactTag: number,
-    href: string,
-    progression: number
-  ) => Promise<number>;
-  highlightSentenceFromProgressionWithStyle?: (
-    reactTag: number,
-    href: string,
-    progression: number,
-    style: HighlightStyle
-  ) => Promise<number>;
   clearHighlight: (reactTag: number) => void;
 };
 
@@ -163,9 +127,6 @@ export function highlightRange(
   }
 
   if (style && !NativeHighlight.highlightRangeWithStyle) {
-    // Keep backward compatibility but make the silent fallback visible.
-    // Without the WithStyle native method, iOS will use its default highlight tint.
-
     console.warn(
       '[react-native-readium] highlightRange: native highlightRangeWithStyle is not available; falling back to default highlight style.'
     );
@@ -230,23 +191,11 @@ export function highlightLocator(
 
 export async function getChapterSentences(
   viewRef: RefObject<any> | any,
-  href: string
+  href: string,
+  splitter: SentenceSplitter
 ): Promise<string[]> {
-  if (!NativeHighlight?.getChapterSentences) {
-    throw new Error(
-      'Native HighlightModule.getChapterSentences is not available'
-    );
-  }
-
-  const cleanHref = href?.trim();
-  if (!cleanHref) {
-    throw new Error('href is required');
-  }
-
-  return NativeHighlight.getChapterSentences(
-    requireReactTag(viewRef),
-    cleanHref
-  );
+  const index = await getOrBuildSentenceIndex(viewRef, href, splitter);
+  return index.sentences.map((s) => s.text);
 }
 
 export async function getChapterSentencePage(
@@ -256,43 +205,53 @@ export async function getChapterSentencePage(
 export async function getChapterSentencePage(
   viewRef: RefObject<any> | any,
   href: string,
+  splitter: SentenceSplitter,
   offset?: number,
   limit?: number
 ): Promise<SentencePage>;
 export async function getChapterSentencePage(
   viewRef: RefObject<any> | any,
   hrefOrParams: string | GetChapterSentencePageParams,
+  splitterOrOffset?: SentenceSplitter | number,
   offset?: number,
   limit?: number
 ): Promise<SentencePage> {
-  if (!NativeHighlight?.getChapterSentencePage) {
-    throw new Error(
-      'Native HighlightModule.getChapterSentencePage is not available'
-    );
+  let resolvedHref: string;
+  let resolvedSplitter: SentenceSplitter;
+  let resolvedOffset: number;
+  let resolvedLimit: number;
+
+  if (typeof hrefOrParams === 'string') {
+    resolvedHref = hrefOrParams;
+    resolvedSplitter = splitterOrOffset as SentenceSplitter;
+    resolvedOffset = offset ?? 0;
+    resolvedLimit = limit ?? 0x7fffffff;
+  } else {
+    resolvedHref = hrefOrParams.href;
+    resolvedSplitter = hrefOrParams.splitter;
+    resolvedOffset = hrefOrParams.offset ?? 0;
+    resolvedLimit = hrefOrParams.limit ?? 0x7fffffff;
   }
 
-  const resolvedHref =
-    typeof hrefOrParams === 'string' ? hrefOrParams : hrefOrParams?.href;
-  const resolvedOffset =
-    typeof hrefOrParams === 'string' ? offset : hrefOrParams?.offset;
-  const resolvedLimit =
-    typeof hrefOrParams === 'string' ? limit : hrefOrParams?.limit;
-
-  const cleanHref = resolvedHref?.trim();
-  if (!cleanHref) {
-    throw new Error('href is required');
-  }
-
-  // If limit is omitted, return all sentences (no default page size).
-  // We use a large safe int since the native bridge expects an Int.
-  const nativeLimit = resolvedLimit == null ? 0x7fffffff : Number(resolvedLimit);
-
-  return NativeHighlight.getChapterSentencePage(
-    requireReactTag(viewRef),
-    cleanHref,
-    Number(resolvedOffset ?? 0),
-    nativeLimit
+  const index = await getOrBuildSentenceIndex(
+    viewRef,
+    resolvedHref,
+    resolvedSplitter
   );
+  const total = index.sentences.length;
+  const safeOffset = Math.max(0, Math.min(resolvedOffset, total));
+  const safeLimit = Math.max(0, resolvedLimit);
+
+  const items: SentencePageItem[] =
+    safeLimit === 0
+      ? []
+      : index.sentences.slice(safeOffset, safeOffset + safeLimit).map((s) => ({
+          index: s.index,
+          text: s.text,
+          locator: s.locator,
+        }));
+
+  return { total, items };
 }
 
 export async function getSentenceIndexFromProgression(
@@ -302,23 +261,28 @@ export async function getSentenceIndexFromProgression(
 export async function getSentenceIndexFromProgression(
   viewRef: RefObject<any> | any,
   href: string,
-  progression: number
+  progression: number,
+  splitter: SentenceSplitter
 ): Promise<number>;
 export async function getSentenceIndexFromProgression(
   viewRef: RefObject<any> | any,
   hrefOrParams: string | GetSentenceIndexFromProgressionParams,
-  progression?: number
+  progression?: number,
+  splitter?: SentenceSplitter
 ): Promise<number> {
-  if (!NativeHighlight?.getSentenceIndexFromProgression) {
-    throw new Error(
-      'Native HighlightModule.getSentenceIndexFromProgression is not available'
-    );
-  }
+  let resolvedHref: string;
+  let resolvedProgression: number;
+  let resolvedSplitter: SentenceSplitter;
 
-  const resolvedHref =
-    typeof hrefOrParams === 'string' ? hrefOrParams : hrefOrParams?.href;
-  const resolvedProgression =
-    typeof hrefOrParams === 'string' ? progression : hrefOrParams?.progression;
+  if (typeof hrefOrParams === 'string') {
+    resolvedHref = hrefOrParams;
+    resolvedProgression = progression!;
+    resolvedSplitter = splitter!;
+  } else {
+    resolvedHref = hrefOrParams.href;
+    resolvedProgression = hrefOrParams.progression;
+    resolvedSplitter = hrefOrParams.splitter;
+  }
 
   const cleanHref = resolvedHref?.trim();
   if (!cleanHref) {
@@ -330,112 +294,23 @@ export async function getSentenceIndexFromProgression(
     throw new Error('progression must be a finite number');
   }
 
-  return NativeHighlight.getSentenceIndexFromProgression(
-    requireReactTag(viewRef),
+  const index = await getOrBuildSentenceIndex(
+    viewRef,
     cleanHref,
-    p
+    resolvedSplitter
   );
-}
 
-export async function highlightSentenceFromProgression(
-  viewRef: RefObject<any> | any,
-  params: HighlightSentenceFromProgressionParams
-): Promise<number>;
-export async function highlightSentenceFromProgression(
-  viewRef: RefObject<any> | any,
-  href: string,
-  progression: number
-): Promise<number>;
-export async function highlightSentenceFromProgression(
-  viewRef: RefObject<any> | any,
-  hrefOrParams: string | HighlightSentenceFromProgressionParams,
-  progression?: number
-): Promise<number> {
-  const reactTag = requireReactTag(viewRef);
+  // Extract position progressions from the sentence index's locators
+  // We need the raw positionEntries for the algorithm, but they're not stored
+  // in the sentence index. Use the sentence's pageStartProgression values
+  // to reconstruct the unique position boundaries.
+  const positionProgressions = [
+    ...new Set(index.sentences.map((s) => s.pageStartProgression)),
+  ].sort((a, b) => a - b);
 
-  const resolvedHref =
-    typeof hrefOrParams === 'string' ? hrefOrParams : hrefOrParams?.href;
-  const cleanHref = resolvedHref?.trim();
-  if (!cleanHref) {
-    throw new Error('href is required');
-  }
-
-  const resolvedProgression =
-    typeof hrefOrParams === 'string' ? progression : hrefOrParams?.progression;
-  const p = Number(resolvedProgression);
-  if (!Number.isFinite(p)) {
-    throw new Error('progression must be a finite number');
-  }
-
-  const style =
-    typeof hrefOrParams === 'string' ? undefined : hrefOrParams?.style;
-  validateHighlightStyle(style);
-
-  if (style && NativeHighlight?.highlightSentenceFromProgressionWithStyle) {
-    return NativeHighlight.highlightSentenceFromProgressionWithStyle(
-      reactTag,
-      cleanHref,
-      p,
-      style
-    );
-  }
-
-  if (!NativeHighlight?.highlightSentenceFromProgression || style) {
-    const idx = await getSentenceIndexFromProgression(viewRef, {
-      href: cleanHref,
-      progression: p,
-    });
-    highlightSentence(viewRef, { href: cleanHref, sentenceIndex: idx, style });
-    return idx;
-  }
-
-  return NativeHighlight.highlightSentenceFromProgression(
-    reactTag,
-    cleanHref,
-    p
+  return getSentenceIndexFromProgressionSync(
+    index,
+    p,
+    positionProgressions
   );
-}
-
-export function highlightSentence(
-  viewRef: RefObject<any> | any,
-  params: HighlightSentenceParams
-): void {
-  const reactTag = requireReactTag(viewRef);
-
-  if (!NativeHighlight?.highlightSentence) {
-    throw new Error(
-      'Native HighlightModule.highlightSentence is not available'
-    );
-  }
-
-  const href = params?.href?.trim();
-  if (!href) {
-    throw new Error('href is required');
-  }
-
-  const idx = Number(params.sentenceIndex);
-  if (!Number.isInteger(idx) || idx < 0) {
-    throw new Error('Invalid sentenceIndex (must be a non-negative integer)');
-  }
-
-  const style = params.style;
-  validateHighlightStyle(style);
-  if (style && NativeHighlight.highlightSentenceWithStyle) {
-    (NativeHighlight.highlightSentenceWithStyle as any)(
-      reactTag,
-      href,
-      idx,
-      style
-    );
-    return;
-  }
-
-  if (style && !NativeHighlight.highlightSentenceWithStyle) {
-    console.warn(
-      '[react-native-readium] highlightSentence: native highlightSentenceWithStyle is not available; falling back to default highlight style.'
-    );
-  }
-
-  // The native method is synchronous; ignoring potential Promise return keeps compatibility.
-  (NativeHighlight.highlightSentence as any)(reactTag, href, idx);
 }

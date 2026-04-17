@@ -62,140 +62,140 @@ export const Reader: React.FC<ReaderProps> = ({
   const { location: externalNav } = useExternalLocation(externalLocation);
   const [currentLocation, setCurrentLocation] = useState<Locator>();
   const [preferences, setPreferences] = useState<ReadiumProps['preferences']>({
-    theme: 'dark',
+    theme: 'sepia',
   });
   const [isHighlightModalVisible, setIsHighlightModalVisible] = useState(false);
-  const [allowedHrefs, setAllowedHrefs] = useState<string[] | undefined>(
-    undefined
-  );
-  const [isLoadingAllowedHrefs, setIsLoadingAllowedHrefs] =
-    useState<boolean>(false);
+  // const [allowedHrefs, setAllowedHrefs] = useState<string[] | undefined>(
+  //   undefined
+  // );
+  // const [isLoadingAllowedHrefs, setIsLoadingAllowedHrefs] =
+  //   useState<boolean>(false);
   const ref = useRef<any>(undefined);
   const isNative = Platform.OS !== 'web';
 
-  useEffect(() => {
-    let isCancelled = false;
+  // useEffect(() => {
+  //   let isCancelled = false;
 
-    async function resolveAllowedHrefs() {
-      if (!limitToFirstTwoChapters) {
-        setAllowedHrefs(undefined);
-        setIsLoadingAllowedHrefs(false);
-        return;
-      }
+  //   async function resolveAllowedHrefs() {
+  //     if (!limitToFirstTwoChapters) {
+  //       setAllowedHrefs(undefined);
+  //       setIsLoadingAllowedHrefs(false);
+  //       return;
+  //     }
 
-      if (!isNative || !file?.url) {
-        setAllowedHrefs(undefined);
-        setIsLoadingAllowedHrefs(false);
-        return;
-      }
+  //     if (!isNative || !file?.url) {
+  //       setAllowedHrefs(undefined);
+  //       setIsLoadingAllowedHrefs(false);
+  //       return;
+  //     }
 
-      setIsLoadingAllowedHrefs(true);
-      // Keep access restricted while loading the headless index.
-      setAllowedHrefs([]);
+  //     setIsLoadingAllowedHrefs(true);
+  //     // Keep access restricted while loading the headless index.
+  //     setAllowedHrefs([]);
 
-      try {
-        const index = await openPublicationHeadless({
-          url: file.url,
-          id: `first-two-${file.url}`,
-        });
+  //     try {
+  //       const index = await openPublicationHeadless({
+  //         url: file.url,
+  //         id: `first-two-${file.url}`,
+  //       });
 
-        const readingOrderHrefs = (index.readingOrder || [])
-          .map((item) => item.href)
-          .filter((href): href is string => !!href)
-          .slice(0, 2);
+  //       const readingOrderHrefs = (index.readingOrder || [])
+  //         .map((item) => item.href)
+  //         .filter((href): href is string => !!href)
+  //         .slice(0, 2);
 
-        const fallbackPositionHrefs = Array.from(
-          new Set(
-            (index.positions || [])
-              .map((position) => position.href)
-              .filter((href): href is string => !!href)
-          )
-        ).slice(0, 2);
+  //       const fallbackPositionHrefs = Array.from(
+  //         new Set(
+  //           (index.positions || [])
+  //             .map((position) => position.href)
+  //             .filter((href): href is string => !!href)
+  //         )
+  //       ).slice(0, 2);
 
-        const resolved =
-          readingOrderHrefs.length > 0
-            ? readingOrderHrefs
-            : fallbackPositionHrefs;
+  //       const resolved =
+  //         readingOrderHrefs.length > 0
+  //           ? readingOrderHrefs
+  //           : fallbackPositionHrefs;
 
-        if (!isCancelled) {
-          setAllowedHrefs(resolved);
-          console.log('Allowed hrefs (first two chapters):', resolved);
-        }
-      } catch (error) {
-        if (!isCancelled) {
-          console.log(
-            'Failed to resolve allowed hrefs from headless index',
-            error
-          );
-          setAllowedHrefs([]);
-        }
-      } finally {
-        if (!isCancelled) {
-          setIsLoadingAllowedHrefs(false);
-        }
-      }
-    }
+  //       if (!isCancelled) {
+  //         setAllowedHrefs(resolved);
+  //         console.log('Allowed hrefs (first two chapters):', resolved);
+  //       }
+  //     } catch (error) {
+  //       if (!isCancelled) {
+  //         console.log(
+  //           'Failed to resolve allowed hrefs from headless index',
+  //           error
+  //         );
+  //         setAllowedHrefs([]);
+  //       }
+  //     } finally {
+  //       if (!isCancelled) {
+  //         setIsLoadingAllowedHrefs(false);
+  //       }
+  //     }
+  //   }
 
-    resolveAllowedHrefs();
+  //   resolveAllowedHrefs();
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [file?.url, isNative, limitToFirstTwoChapters]);
+  //   return () => {
+  //     isCancelled = true;
+  //   };
+  // }, [file?.url, isNative, limitToFirstTwoChapters]);
 
-  const paywallHTML = useMemo(() => {
-    const message = isLoadingAllowedHrefs
-      ? 'Resolving the first two allowed chapters.'
-      : 'Only the first two chapters are enabled in test mode.';
+  //   const paywallHTML = useMemo(() => {
+  //     const message = isLoadingAllowedHrefs
+  //       ? 'Resolving the first two allowed chapters.'
+  //       : 'Only the first two chapters are enabled in test mode.';
 
-    return `<?xml version="1.0" encoding="utf-8"?>
-<!DOCTYPE html>
-<html xmlns="http://www.w3.org/1999/xhtml">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Subscription required</title>
-    <style>
-      :root { color-scheme: light dark; }
-      html, body {
-        margin: 0;
-        min-height: 100%;
-        background: #101114;
-        color: #f6f7fb;
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      }
-      body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 2rem;
-        box-sizing: border-box;
-      }
-      main {
-        max-width: 30rem;
-        text-align: center;
-      }
-      h1 {
-        margin: 0 0 0.75rem;
-        font-size: 2rem;
-        line-height: 1.05;
-      }
-      p {
-        margin: 0;
-        font-size: 1rem;
-        line-height: 1.6;
-        opacity: 0.84;
-      }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Subscription required</h1>
-      <p>${message}</p>
-    </main>
-  </body>
-</html>`;
-  }, [isLoadingAllowedHrefs]);
+  //     return `<?xml version="1.0" encoding="utf-8"?>
+  // <!DOCTYPE html>
+  // <html xmlns="http://www.w3.org/1999/xhtml">
+  //   <head>
+  //     <meta charset="utf-8" />
+  //     <meta name="viewport" content="width=device-width, initial-scale=1" />
+  //     <title>Subscription required</title>
+  //     <style>
+  //       :root { color-scheme: light dark; }
+  //       html, body {
+  //         margin: 0;
+  //         min-height: 100%;
+  //         background: #101114;
+  //         color: #f6f7fb;
+  //         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  //       }
+  //       body {
+  //         display: flex;
+  //         align-items: center;
+  //         justify-content: center;
+  //         padding: 2rem;
+  //         box-sizing: border-box;
+  //       }
+  //       main {
+  //         max-width: 30rem;
+  //         text-align: center;
+  //       }
+  //       h1 {
+  //         margin: 0 0 0.75rem;
+  //         font-size: 2rem;
+  //         line-height: 1.05;
+  //       }
+  //       p {
+  //         margin: 0;
+  //         font-size: 1rem;
+  //         line-height: 1.6;
+  //         opacity: 0.84;
+  //       }
+  //     </style>
+  //   </head>
+  //   <body>
+  //     <main>
+  //       <h1>Subscription required</h1>
+  //       <p>${message}</p>
+  //     </main>
+  //   </body>
+  // </html>`;
+  //   }, [isLoadingAllowedHrefs]);
 
   if (file) {
     return (
@@ -239,8 +239,8 @@ export const Reader: React.FC<ReaderProps> = ({
               location={externalNav}
               disableTextSelection
               preferences={preferences}
-              allowedHrefs={limitToFirstTwoChapters ? allowedHrefs : undefined}
-              paywallHTML={limitToFirstTwoChapters ? paywallHTML : undefined}
+              // allowedHrefs={limitToFirstTwoChapters ? allowedHrefs : undefined}
+              // paywallHTML={limitToFirstTwoChapters ? paywallHTML : undefined}
               hidePageNumbers={true}
               onLocationChange={(locator: Locator) => {
                 console.log('onLocationChange', locator);

@@ -44,7 +44,7 @@ class ReadiumView(
   var isFragmentAdded: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
   var lateInitHighlightRangeJson: String? = null
-  var lateInitHighlightSentenceJson: String? = null
+
   var lateInitHighlightLocatorJson: String? = null
   var hidePageNumbers: Boolean = false
   var disableTextSelection: Boolean = false
@@ -263,10 +263,6 @@ class ReadiumView(
     (fragment as? EpubReaderFragment)?.applyHighlightRangeFromJsonString(highlightRange)
   }
 
-  fun updateHighlightSentenceFromJsonString(highlightSentence: String?) {
-    lateInitHighlightSentenceJson = highlightSentence
-    (fragment as? EpubReaderFragment)?.applyHighlightSentenceFromJsonString(highlightSentence)
-  }
 
   fun updateHighlightLocatorFromJsonString(highlightLocator: String?) {
     lateInitHighlightLocatorJson = highlightLocator
@@ -284,7 +280,7 @@ class ReadiumView(
     updateTextSelectionDisabled(disableTextSelection)
     lateInitSerializedUserPreferences?.let { updatePreferencesFromJsonString(it)}
     lateInitHighlightRangeJson?.let { updateHighlightRangeFromJsonString(it) }
-    lateInitHighlightSentenceJson?.let { updateHighlightSentenceFromJsonString(it) }
+
     lateInitHighlightLocatorJson?.let { updateHighlightLocatorFromJsonString(it) }
     val activity = reactContext.currentActivity as? FragmentActivity
     if (activity == null) {

@@ -151,36 +151,16 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
         val fragment = view.fragment as? EpubReaderFragment
         if (fragment != null) {
           fragment.applyHighlightRangeFromJsonString(null)
-          fragment.applyHighlightSentenceFromJsonString(null)
+
           fragment.applyHighlightLocatorFromJsonString(null)
         } else {
           view.updateHighlightRangeFromJsonString(null)
-          view.updateHighlightSentenceFromJsonString(null)
           view.updateHighlightLocatorFromJsonString(null)
         }
       } catch (t: Throwable) {
         Log.w(TAG, "clearHighlight failed: ${t.message}", t)
       }
     }
-  }
-
-  @ReactMethod
-  fun highlightSentence(
-    reactTag: Int,
-    href: String,
-    sentenceIndex: Int
-  ) {
-    highlightSentenceInternal(reactTag, href, sentenceIndex, null)
-  }
-
-  @ReactMethod
-  fun highlightSentenceWithStyle(
-    reactTag: Int,
-    href: String,
-    sentenceIndex: Int,
-    style: ReadableMap?
-  ) {
-    highlightSentenceInternal(reactTag, href, sentenceIndex, style)
   }
 
   @ReactMethod
@@ -198,39 +178,6 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     style: ReadableMap?
   ) {
     highlightLocatorInternal(reactTag, locator, style)
-  }
-
-  private fun highlightSentenceInternal(
-    reactTag: Int,
-    href: String,
-    sentenceIndex: Int,
-    style: ReadableMap?
-  ) {
-    val activity = reactContext.currentActivity ?: return
-    if (href.isBlank()) return
-
-    val jsonString = JSONObject().apply {
-      put("href", href)
-      put("sentenceIndex", sentenceIndex)
-      style?.let { putStyleIfAny(this, it) }
-      put("requestId", System.currentTimeMillis().toString())
-    }.toString()
-
-    runOnUiThread(activity) {
-      try {
-        val view = activity.findViewById<View>(reactTag) as? ReadiumView ?: return@runOnUiThread
-        val fragment = view.fragment as? EpubReaderFragment
-
-        if (fragment == null) {
-          // Reader not ready yet; store for later.
-          view.updateHighlightSentenceFromJsonString(jsonString)
-        } else {
-          fragment.applyHighlightSentenceFromJsonString(jsonString)
-        }
-      } catch (t: Throwable) {
-        Log.w(TAG, "highlightSentence failed: ${t.message}", t)
-      }
-    }
   }
 
   private fun highlightLocatorInternal(
@@ -271,130 +218,43 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
   }
 
   @ReactMethod
-  fun getChapterSentences(
+  fun getChapterRawText(
     reactTag: Int,
     href: String,
     promise: Promise
   ) {
     withEpubReaderFragment(reactTag, href, promise) { fragment ->
-      fragment.getChapterSentencesAsync(
+      fragment.getChapterRawTextAsync(
         href,
-        onSuccess = { sentences ->
-          val arr = Arguments.createArray().apply {
-            sentences.forEach { pushString(it) }
+        onSuccess = { rawText ->
+          val segmentsArray = Arguments.createArray().apply {
+            rawText.segments.forEach { seg ->
+              pushMap(Arguments.createMap().apply {
+                putString("text", seg.text)
+                putInt("start", seg.start)
+                putInt("end", seg.end)
+                putMap("locator", seg.locator.toWritableMap())
+              })
+            }
           }
-          promise.resolve(arr)
-        },
-        onError = { error ->
-          promise.reject("sentences_error", error.message, error)
-        }
-      )
-    }
-  }
-
-  @ReactMethod
-  fun getChapterSentencePage(
-    reactTag: Int,
-    href: String,
-    offset: Int,
-    limit: Int,
-    promise: Promise
-  ) {
-    withEpubReaderFragment(reactTag, href, promise) { fragment ->
-      fragment.getChapterSentencePageAsync(
-        href,
-        offset,
-        limit,
-        onSuccess = { total, items ->
+          val positionEntriesArray = Arguments.createArray().apply {
+            rawText.positionEntries.forEach { entry ->
+              pushMap(Arguments.createMap().apply {
+                putDouble("progression", entry.progression)
+                putInt("position", entry.position)
+                putDouble("totalProgression", entry.totalProgression)
+              })
+            }
+          }
           val payload = Arguments.createMap().apply {
-            putInt("total", total)
-            putArray(
-              "items",
-              Arguments.createArray().apply {
-                items.forEach { item ->
-                  pushMap(
-                    Arguments.createMap().apply {
-                      putInt("index", item.index)
-                      putString("text", item.text)
-                      if (item.locator != null) {
-                        putMap("locator", item.locator.toWritableMap())
-                      }
-                    }
-                  )
-                }
-              }
-            )
+            putString("combinedText", rawText.combinedText)
+            putArray("segments", segmentsArray)
+            putArray("positionEntries", positionEntriesArray)
           }
           promise.resolve(payload)
         },
         onError = { error ->
-          promise.reject("sentences_error", error.message, error)
-        }
-      )
-    }
-  }
-
-  @ReactMethod
-  fun getSentenceIndexFromProgression(
-    reactTag: Int,
-    href: String,
-    progression: Double,
-    promise: Promise
-  ) {
-    withEpubReaderFragment(reactTag, href, promise) { fragment ->
-      fragment.getSentenceIndexFromProgressionAsync(
-        href,
-        progression,
-        onSuccess = { index ->
-          promise.resolve(index)
-        },
-        onError = { error ->
-          promise.reject("sentences_error", error.message, error)
-        }
-      )
-    }
-  }
-
-  @ReactMethod
-  fun highlightSentenceFromProgression(
-    reactTag: Int,
-    href: String,
-    progression: Double,
-    promise: Promise
-  ) {
-    withEpubReaderFragment(reactTag, href, promise) { fragment ->
-      fragment.getSentenceIndexFromProgressionAsync(
-        href,
-        progression,
-        onSuccess = { index ->
-          highlightSentence(reactTag, href, index)
-          promise.resolve(index)
-        },
-        onError = { error ->
-          promise.reject("sentences_error", error.message, error)
-        }
-      )
-    }
-  }
-
-  @ReactMethod
-  fun highlightSentenceFromProgressionWithStyle(
-    reactTag: Int,
-    href: String,
-    progression: Double,
-    style: ReadableMap?,
-    promise: Promise
-  ) {
-    withEpubReaderFragment(reactTag, href, promise) { fragment ->
-      fragment.getSentenceIndexFromProgressionAsync(
-        href,
-        progression,
-        onSuccess = { index ->
-          highlightSentenceWithStyle(reactTag, href, index, style)
-          promise.resolve(index)
-        },
-        onError = { error ->
-          promise.reject("sentences_error", error.message, error)
+          promise.reject("raw_text_error", error.message, error)
         }
       )
     }
@@ -417,18 +277,4 @@ class HighlightModule(private val reactContext: ReactApplicationContext) :
     }
   }
 
-  @ReactMethod
-  fun highlightSentenceAsync(
-    reactTag: Int,
-    href: String,
-    sentenceIndex: Int,
-    promise: Promise
-  ) {
-    try {
-      highlightSentence(reactTag, href, sentenceIndex)
-      promise.resolve(null)
-    } catch (e: Exception) {
-      promise.reject("highlight_error", e.message, e)
-    }
-  }
 }

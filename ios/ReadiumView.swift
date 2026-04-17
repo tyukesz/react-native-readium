@@ -103,8 +103,7 @@ class ReadiumView : UIView, Loggable {
   }
   private var subscriptions = Set<AnyCancellable>()
   private let viewportTextExtractor = ViewportTextExtractor()
-  private typealias SentenceEntry = SentenceIndexStore.SentenceEntry
-  private let sentenceIndexStore = SentenceIndexStore()
+  private let chapterTextExtractor = ChapterTextExtractor()
   private var loadRequestID: Int = 0
   private var allowedHrefsSet: Set<String>? = nil
   private var lastKnownHref: String? = nil
@@ -234,23 +233,6 @@ class ReadiumView : UIView, Loggable {
     return nil
   }
 
-  private func rewrittenSentenceLocatorJson(_ entry: SentenceEntry, hrefKey: String) -> [String: Any] {
-    var json = entry.locator.json
-    var locations = (json["locations"] as? [String: Any]) ?? [:]
-
-    // Per-sentence progression must be stable and not snapped to segment locators.
-    locations["progression"] = min(max(entry.progression, 0.0), 1.0)
-
-    if let pos = resolvePositionFromProgression(hrefKey: hrefKey, progression: entry.progression) {
-      locations["position"] = pos
-    }
-    if let tp = resolveTotalProgressionFromProgression(hrefKey: hrefKey, progression: entry.progression) {
-      locations["totalProgression"] = tp
-    }
-
-    json["locations"] = locations
-    return json
-  }
 
   private func ensurePositionsCache() async {
     if !publicationPositionsByHref.isEmpty && !publicationPositionEntriesByHref.isEmpty { return }
@@ -394,23 +376,33 @@ class ReadiumView : UIView, Loggable {
       // This keeps behavior aligned with Android (best-effort result).
     }
 
-    let sentences = await getSentencesForHref(hrefKey)
-    let totalChars = sentences.last?.end ?? 0
+    // Use segment-based range (sentences are now on JS side).
+    guard let publication = readerViewController?.publication else {
+      return ["href": hrefKey, "start": 0, "end": 0, "totalChars": 0, "rangeSource": "approx"]
+    }
+    let rawText = await chapterTextExtractor.getChapterRawText(
+      href: hrefKey,
+      publication: publication,
+      normalizeHref: normalizeHref,
+      normalizedHrefForComparison: normalizedHrefForComparison
+    )
+    let totalChars = rawText.combinedText.count
 
-    // Select sentences by progression interval instead of matching pageStartProgression exactly.
-    // This stays robust even when the page boundary comes from `locations.position`.
-    let inPage = sentences
-      .filter { $0.progression >= pageStart - EPS && $0.progression < pageEnd - EPS }
-      .sorted { $0.start < $1.start }
+    let inPageSegments = rawText.segments.filter { seg in
+      let segProgression = seg.locator.locations.progression ?? 0.0
+      return segProgression >= pageStart - EPS && segProgression < pageEnd - EPS
+    }
 
-    var start = (inPage.first?.start ?? 0).clamped(to: 0...max(totalChars, 0))
-    var end = (inPage.last?.end ?? totalChars).clamped(to: start...max(totalChars, start))
+    var start = inPageSegments.first?.start ?? 0
+    var end = inPageSegments.last?.end ?? totalChars
+    start = max(0, min(start, totalChars))
+    end = max(start, min(end, totalChars))
 
     if totalChars > 0 {
       let approxStart = Int((Double(totalChars) * pageStart).rounded(.down))
       let approxEnd = Int((Double(totalChars) * pageEnd).rounded(.up))
-      let clampStart = approxStart.clamped(to: 0...totalChars)
-      let clampEnd = approxEnd.clamped(to: clampStart...totalChars)
+      let clampStart = max(0, min(approxStart, totalChars))
+      let clampEnd = max(clampStart, min(approxEnd, totalChars))
       if clampEnd > clampStart {
         let s = max(start, clampStart)
         let e = min(end, clampEnd)
@@ -439,15 +431,12 @@ class ReadiumView : UIView, Loggable {
     if includeText {
       let maxLen = (maxTextLength ?? Int.max)
       let take = max(0, min(end - start, maxLen))
-      let text = inPage.map { $0.text }.joined()
-      if take < text.count {
-        let i = text.index(text.startIndex, offsetBy: take)
-        payload["text"] = sanitizeVisibleTextForJs(String(text[..<i]))
-        payload["isTruncated"] = true
-      } else {
-        payload["text"] = sanitizeVisibleTextForJs(text)
-        payload["isTruncated"] = false
-      }
+      let combined = rawText.combinedText
+      let textStart = combined.index(combined.startIndex, offsetBy: min(start, combined.count))
+      let textEnd = combined.index(combined.startIndex, offsetBy: min(start + take, combined.count))
+      let textSlice = String(combined[textStart..<textEnd])
+      payload["text"] = sanitizeVisibleTextForJs(textSlice)
+      payload["isTruncated"] = take < (end - start)
     }
 
     if let pos = current.locations.position {
@@ -462,7 +451,7 @@ class ReadiumView : UIView, Loggable {
 
   @objc var file: NSDictionary? = nil {
     didSet {
-      sentenceIndexStore.clear()
+      // Sentence cache is now on JS side; no native cache to clear.
       publicationPositionsByHref.removeAll()
       publicationPositionEntriesByHref.removeAll()
       publicationPositionEntriesByProgressionByHref.removeAll()
@@ -480,7 +469,7 @@ class ReadiumView : UIView, Loggable {
   }
   @objc var preferences: NSString? = nil {
     didSet {
-      sentenceIndexStore.clear()
+      // Sentence cache is now on JS side; no native cache to clear.
       publicationPositionsByHref.removeAll()
       publicationPositionEntriesByHref.removeAll()
       publicationPositionEntriesByProgressionByHref.removeAll()
@@ -748,16 +737,51 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
-  private func getSentencesForHref(_ href: String) async -> [SentenceEntry] {
-    await ensurePositionsCache()
-    guard let publication = readerViewController?.publication else { return [] }
-    return await sentenceIndexStore.getSentencesForHref(
-      href: href,
-      publication: publication,
-      normalizeHref: normalizeHref,
-      normalizedHrefForComparison: normalizedHrefForComparison,
-      positionsByHref: publicationPositionsByHref
-    )
+  func getChapterRawText(
+    href: String,
+    completion: @escaping (_ result: [String: Any]) -> Void
+  ) {
+    Task { @MainActor [weak self] in
+      guard let self = self else { return }
+      await self.ensurePositionsCache()
+      guard let publication = self.readerViewController?.publication else {
+        completion(["combinedText": "", "segments": [], "positionEntries": []])
+        return
+      }
+
+      let rawText = await self.chapterTextExtractor.getChapterRawText(
+        href: href,
+        publication: publication,
+        normalizeHref: self.normalizeHref,
+        normalizedHrefForComparison: self.normalizedHrefForComparison
+      )
+
+      let hrefKey = self.normalizedHrefForComparison(href)
+
+      let segmentsJson: [[String: Any]] = rawText.segments.map { seg in
+        [
+          "text": seg.text,
+          "start": seg.start,
+          "end": seg.end,
+          "locator": seg.locator.json,
+        ]
+      }
+
+      let entries = self.publicationPositionEntriesByProgressionByHref[hrefKey] ?? []
+      let positionEntriesJson: [[String: Any]] = entries.map { e in
+        [
+          "progression": e.progression,
+          "position": e.position,
+          "totalProgression": e.totalProgression ?? 0.0,
+        ]
+      }
+
+      completion([
+        "combinedText": rawText.combinedText,
+        "segments": segmentsJson,
+        "positionEntries": positionEntriesJson,
+      ])
+    }
   }
 
 
@@ -815,23 +839,6 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
-  @objc func highlightSentence(href: String, sentenceIndex: Int) {
-    highlightSentenceWithStyle(href: href, sentenceIndex: sentenceIndex, style: nil)
-  }
-
-  @objc func highlightSentenceWithStyle(href: String, sentenceIndex: Int, style: NSDictionary?) {
-    Task { @MainActor [weak self] in
-      guard let self = self else { return }
-      guard let navigator = self.readerViewController?.navigator else { return }
-
-      let sentences = await self.getSentencesForHref(href)
-      guard sentenceIndex >= 0, sentenceIndex < sentences.count else { return }
-
-      let entry = sentences[sentenceIndex]
-      self.clearHighlight()
-      self.applyHighlightDecoration(locator: entry.locator, style: style)
-    }
-  }
 
   @objc func highlightLocator(location: NSDictionary) {
     highlightLocatorWithStyle(location: location, style: nil)
@@ -855,117 +862,6 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
-  func getChapterSentencePage(
-    href: String,
-    offset: Int,
-    limit: Int,
-    completion: @escaping (_ total: Int, _ items: [[String: Any]]) -> Void
-  ) {
-    Task { @MainActor [weak self] in
-      guard let self = self else { return }
-
-      let sentences = await self.getSentencesForHref(href)
-      let total = sentences.count
-      let safeOffset = max(0, min(offset, total))
-      let safeLimit = max(0, limit)
-
-      let hrefKey = self.normalizedHrefForComparison(href)
-
-      let slice = safeLimit == 0 ? [] : Array(sentences.dropFirst(safeOffset).prefix(safeLimit))
-      let items = slice.map { s in
-        [
-          "index": s.index,
-          "text": s.text,
-          "locator": self.rewrittenSentenceLocatorJson(s, hrefKey: hrefKey),
-        ]
-      }
-
-      completion(total, items)
-    }
-  }
-
-  func getChapterSentences(
-    href: String,
-    completion: @escaping (_ sentences: [String]) -> Void
-  ) {
-    Task { @MainActor [weak self] in
-      guard let self = self else { return }
-      let sentences = await self.getSentencesForHref(href)
-      completion(sentences.map { $0.text })
-    }
-  }
-
-  func getSentenceIndexFromProgression(
-    href: String,
-    progression: Double,
-    completion: @escaping (_ index: Int) -> Void
-  ) {
-    Task { @MainActor [weak self] in
-      guard let self = self else { return }
-
-      let sentences = await self.getSentencesForHref(href)
-      if sentences.isEmpty {
-        completion(0)
-        return
-      }
-
-      let p = max(0.0, min(1.0, progression))
-      let EPS = 1e-9
-
-      let hrefKey = normalizedHrefForComparison(href)
-      let boundaries = publicationPositionsByHref[hrefKey] ?? []
-
-      let bIdx = PublicationPositionResolver.boundaryIndex(for: p, in: boundaries, eps: EPS)
-      let pageStart = boundaries.isEmpty ? 0.0 : (boundaries[safe: bIdx] ?? 0.0)
-      let pageEnd = boundaries.isEmpty ? 1.0 : (boundaries[safe: bIdx + 1] ?? 1.0)
-
-      let inPage = sentences
-        .filter { abs($0.pageStartProgression - pageStart) <= EPS }
-        .sorted { $0.progression < $1.progression }
-
-      if inPage.isEmpty {
-        completion(sentences.first!.index)
-        return
-      }
-
-      // Exact page boundary => first sentence on that page.
-      if p <= pageStart + EPS {
-        completion(inPage.first!.index)
-        return
-      }
-
-      // Otherwise floor within the page.
-      var resolved = inPage.first!.index
-      for s in inPage {
-        if s.progression <= p + EPS && s.progression < pageEnd + EPS {
-          resolved = s.index
-        } else {
-          break
-        }
-      }
-      completion(resolved)
-    }
-  }
-
-  func highlightSentenceFromProgression(
-    href: String,
-    progression: Double,
-    completion: @escaping (_ index: Int) -> Void
-  ) {
-    highlightSentenceFromProgression(href: href, progression: progression, style: nil, completion: completion)
-  }
-
-  func highlightSentenceFromProgression(
-    href: String,
-    progression: Double,
-    style: NSDictionary?,
-    completion: @escaping (_ index: Int) -> Void
-  ) {
-    getSentenceIndexFromProgression(href: href, progression: progression) { [weak self] index in
-      self?.highlightSentenceWithStyle(href: href, sentenceIndex: index, style: style)
-      completion(index)
-    }
-  }
 
   func updatePreferences(_ preferences: NSString?) {
 
