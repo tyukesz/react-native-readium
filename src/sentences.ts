@@ -23,6 +23,8 @@ export type SentenceIndex = {
   href: string;
   sentences: SentenceEntry[];
   totalChars: number;
+  /** Progression values at every position boundary, straight from native. */
+  positionProgressions: number[];
 };
 
 // ---------------------------------------------------------------------------
@@ -247,12 +249,12 @@ function buildSentenceIndex(
   const { combinedText, segments, positionEntries } = rawText;
 
   if (!combinedText || combinedText.length === 0) {
-    return { href, sentences: [], totalChars: 0 };
+    return { href, sentences: [], totalChars: 0, positionProgressions: [] };
   }
 
   const sentenceTexts = splitter(combinedText);
   if (sentenceTexts.length === 0) {
-    return { href, sentences: [], totalChars: 0 };
+    return { href, sentences: [], totalChars: 0, positionProgressions: [] };
   }
 
   const mapped = mapSentencesToOffsets(combinedText, sentenceTexts);
@@ -342,7 +344,8 @@ function buildSentenceIndex(
     };
   });
 
-  return { href, sentences, totalChars };
+  const positionProgressions = positionEntries.map((e) => e.progression);
+  return { href, sentences, totalChars, positionProgressions };
 }
 
 // ---------------------------------------------------------------------------

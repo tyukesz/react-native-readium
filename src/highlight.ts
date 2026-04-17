@@ -300,17 +300,7 @@ export async function getSentenceIndexFromProgression(
     resolvedSplitter
   );
 
-  // Extract position progressions from the sentence index's locators
-  // We need the raw positionEntries for the algorithm, but they're not stored
-  // in the sentence index. Use the sentence's pageStartProgression values
-  // to reconstruct the unique position boundaries.
-  const positionProgressions = [
-    ...new Set(index.sentences.map((s) => s.pageStartProgression)),
-  ].sort((a, b) => a - b);
+  const { positionProgressions } = index;
 
-  return getSentenceIndexFromProgressionSync(
-    index,
-    p,
-    positionProgressions
-  );
+  return getSentenceIndexFromProgressionSync(index, p, positionProgressions);
 }

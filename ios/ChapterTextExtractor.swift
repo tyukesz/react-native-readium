@@ -22,9 +22,10 @@ final class ChapterTextExtractor {
     normalizeHref: (String) -> String,
     normalizedHrefForComparison: (String) -> String
   ) async -> ChapterRawText {
+    let key = normalizeHref(href)
     guard let startLocator = await ReaderService.locatorFromLocation(
       [
-        "href": href,
+        "href": key,
         "type": "application/xhtml+xml",
         "locations": [
           "progression": 0
@@ -56,7 +57,7 @@ final class ChapterTextExtractor {
         var isFirstSegInElement = true
         for segment in textElement.segments {
           let segmentHref = normalizeHref(segment.locator.href.url.relativeString)
-          if segmentHref != href {
+          if segmentHref != key {
             if started {
               return buildResult(rawSegments)
             }
