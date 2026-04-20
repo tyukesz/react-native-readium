@@ -14,10 +14,13 @@ import {
   getSentenceIndexFromProgression,
   getVisibleTextRange,
   highlightLocator,
-  highlightSentence,
   navigateTo,
 } from '@tyukesz/react-native-readium';
-import type { Link, Locator } from '@tyukesz/react-native-readium';
+import type {
+  Link,
+  Locator,
+  SentenceSplitter,
+} from '@tyukesz/react-native-readium';
 
 export type VisibleRange = {
   href: string;
@@ -32,11 +35,49 @@ export type SentencePreviewItem = {
   progression?: number;
 };
 
+// Normalize whitespace: collapse all runs of whitespace (incl. newlines) into single space, trim.
+function cleanText(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+// Default sentence splitter:
+// 1. Split on any newline(s) — each line/paragraph becomes a separate chunk
+// 2. Within each chunk, split into sentences using Intl.Segmenter or regex fallback
+// 3. Clean all whitespace from results
+const defaultSplitter: SentenceSplitter = (rawText: string): string[] => {
+  const chunks = rawText
+    .split(/\n+/)
+    .map((c) => c.trim())
+    .filter((c) => c.length > 0);
+
+  const results: string[] = [];
+
+  for (const chunk of chunks) {
+    if (typeof Intl !== 'undefined' && 'Segmenter' in Intl) {
+      const segmenter = new (Intl as any).Segmenter('en', {
+        granularity: 'sentence',
+      });
+      for (const seg of segmenter.segment(chunk)) {
+        const cleaned = cleanText(seg.segment);
+        if (cleaned.length > 0) results.push(cleaned);
+      }
+    } else {
+      for (const s of chunk.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
+        const cleaned = cleanText(s);
+        if (cleaned.length > 0) results.push(cleaned);
+      }
+    }
+  }
+
+  return results;
+};
+
 interface HighlightModalProps {
   visible: boolean;
   onClose: () => void;
   readerRef: React.RefObject<any>;
   location?: Locator | Link;
+  splitter?: SentenceSplitter;
 }
 
 export const HighlightModal: React.FC<HighlightModalProps> = ({
@@ -44,6 +85,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
   onClose,
   readerRef,
   location,
+  splitter = defaultSplitter,
 }) => {
   const isNative = Platform.OS !== 'web';
   const [highlightHref, setHighlightHref] = useState<string>('');
@@ -65,46 +107,6 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     }
   }, [location]);
 
-  const applyHighlight = useCallback(async () => {
-    const href = highlightHref.trim();
-    if (!href) return;
-
-    const idx = Number(sentenceIndexText);
-    if (!Number.isInteger(idx) || idx < 0) return;
-
-    highlightSentence(readerRef, {
-      href,
-      sentenceIndex: idx,
-      style: {
-        tint: '#f4090d',
-        isActive: false,
-      },
-    });
-
-    if (isNative) {
-      try {
-        const page = await getChapterSentencePage(readerRef, {
-          href,
-          offset: idx,
-          limit: 1,
-        });
-        const item = page.items?.[0];
-        if (!item) {
-          throw new Error('Failed to resolve sentence page item');
-        }
-
-        if (item.locator) {
-          console.log('navigateTo locator', item);
-          await navigateTo(readerRef, item.locator);
-        }
-      } catch (e) {
-        console.log('navigateTo failed', e);
-      }
-    }
-
-    onClose();
-  }, [highlightHref, sentenceIndexText, readerRef, isNative, onClose]);
-
   const applyHighlightLocator = useCallback(async () => {
     const href = highlightHref.trim();
     if (!href) return;
@@ -117,10 +119,9 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     try {
       const page = await getChapterSentencePage(readerRef, {
         href,
-        offset: idx,
-        limit: 1,
+        splitter,
       });
-      const item = page.items?.[0];
+      const item = page.items?.[idx];
       if (!item?.locator) {
         throw new Error('Failed to resolve locator for sentence');
       }
@@ -138,7 +139,14 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     }
 
     onClose();
-  }, [highlightHref, sentenceIndexText, isNative, onClose, readerRef]);
+  }, [
+    highlightHref,
+    sentenceIndexText,
+    isNative,
+    onClose,
+    readerRef,
+    splitter,
+  ]);
 
   const clearHighlightAction = useCallback(() => {
     clearNativeHighlight(readerRef);
@@ -157,6 +165,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
       setIsLoadingSentences(true);
       const page = await getChapterSentencePage(readerRef, {
         href,
+        splitter,
       });
       console.log('loadSentencesCount', page);
       setSentenceCount(page.total);
@@ -166,7 +175,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     } finally {
       setIsLoadingSentences(false);
     }
-  }, [highlightHref, isNative, readerRef]);
+  }, [highlightHref, isNative, readerRef, splitter]);
 
   const loadSentencePreview = useCallback(async () => {
     if (!isNative) return;
@@ -199,24 +208,26 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
       const idx = await getSentenceIndexFromProgression(readerRef, {
         href,
         progression: p,
+        splitter,
       });
       console.log({ href, p, idx });
       setSentenceIndexText(String(idx));
-      highlightSentence(readerRef, { href, sentenceIndex: idx });
 
       const page = await getChapterSentencePage(readerRef, {
         href,
         offset: idx,
         limit: 1,
+        splitter,
       });
       const item = page.items?.[0];
       if (item?.locator) {
+        highlightLocator(readerRef, item.locator);
         await navigateTo(readerRef, item.locator);
       }
     } catch (e) {
       console.log('getSentenceIndexFromProgression failed', e);
     }
-  }, [highlightHref, progressionText, isNative, readerRef]);
+  }, [highlightHref, progressionText, isNative, readerRef, splitter]);
 
   useEffect(() => {
     if (!visible) {
@@ -335,20 +346,22 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
           </View>
 
           <View style={styles.modalRow}>
-            <Pressable onPress={clearHighlightAction} style={styles.modalButton}>
+            <Pressable
+              onPress={clearHighlightAction}
+              style={styles.modalButton}
+            >
               <Text style={styles.actionButtonText}>Clear</Text>
             </Pressable>
             <Pressable onPress={onClose} style={styles.modalButton}>
               <Text style={styles.actionButtonText}>Cancel</Text>
             </Pressable>
             <Pressable
-              onPress={applyHighlight}
+              onPress={applyHighlightLocator}
               style={[styles.modalButton, styles.modalButtonPrimary]}
             >
-              <Text style={styles.modalPrimaryButtonText}>Highlight (Index)</Text>
-            </Pressable>
-            <Pressable onPress={applyHighlightLocator} style={styles.modalButton}>
-              <Text style={styles.actionButtonText}>Highlight (Locator)</Text>
+              <Text style={styles.modalPrimaryButtonText}>
+                Highlight (Locator)
+              </Text>
             </Pressable>
           </View>
         </View>

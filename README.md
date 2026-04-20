@@ -331,82 +331,96 @@ DRM is not supported at this time. However, there is a clear path to [support it
 
 Quick reference for the sentence-extraction and highlighting primitives exported by the JS API.
 
-- Import (named functions):
+Sentence splitting happens on the JS side via a mandatory `SentenceSplitter` callback. The native side extracts raw chapter text; JS splits, caches (LRU, 4 chapters), and builds locators.
+
+- Import:
 
 ```ts
 import {
   highlightRange,
   highlightLocator,
-  highlightSentence,
-  highlightSentenceFromProgression,
   navigateTo,
   getChapterSentencePage,
   getChapterSentences,
   getSentenceIndexFromProgression,
   clearHighlight,
-} from '@tyukesz/react-native-readium'
+  clearSentenceCache,
+} from '@tyukesz/react-native-readium';
+import type { SentenceSplitter } from '@tyukesz/react-native-readium';
 ```
 
-- Notes:
-  - The JS API prefers a single named-arguments object for calls that have multiple parameters. Example: `highlightSentence(ref, { href, sentenceIndex, style })`.
-  - Style-aware native methods are optional on older native installs. When a `style` is provided and the native side supports it, the library will call the style-aware native entrypoint automatically. If not available, the call falls back to the default platform highlight style and a warning is logged.
-  
+- `SentenceSplitter` — `(rawText: string) => string[]` — Takes the raw chapter text and returns an array of sentence strings. You can safely collapse/trim whitespace; the library matches results back using whitespace-agnostic matching.
+
 - `HighlightStyle` (optional):
   - `tint?: string` — Hex color string: `"#RRGGBB"`, `"#AARRGGBB"`, or `"0xAARRGGBB"`.
   - `isActive?: boolean` — Platform-dependent flag that controls active vs inactive decoration appearance. (if `true` then the text is underlined)
 
-- Functions & behavior (short):
+- Functions:
   - `highlightRange(viewRef, { href, startProgression, endProgression, style? })` — Best-effort highlight across a progression range.
-  - `highlightLocator(viewRef, locator, style?)` — Highlight a specific Readium `Locator` (typically one returned by native APIs).
-  - `highlightSentence(viewRef, { href, sentenceIndex, style? })` — Highlight the given sentence index.
-  - `highlightSentenceFromProgression(viewRef, { href, progression, style? })` — Map progression → nearest sentence, highlight it, and optionally return the sentence index (Promise on some paths).
-  - `getChapterSentences(viewRef, href)` — Promise<string[]> of all sentences (text) for the given resource `href`.
-  - `getChapterSentencePage(viewRef, { href, offset?, limit? })` — Promise<{ total, items[] }> for pagination-friendly access.
+  - `highlightLocator(viewRef, locator, style?)` — Highlight a specific Readium `Locator` (e.g. one returned by `getChapterSentencePage`).
+  - `getChapterSentences(viewRef, href, splitter)` — `Promise<string[]>` of all sentences for the given `href`.
+  - `getChapterSentencePage(viewRef, { href, splitter, offset?, limit? })` — `Promise<{ total, items[] }>` for pagination-friendly access.
     - Each `items[]` entry is `{ index: number, text: string, locator?: Locator }`.
-    - If `limit` is omitted, returns all sentences (no default page size).
-  - `getSentenceIndexFromProgression(viewRef, { href, progression })` — Promise<number> mapping a progression (0..1) into a sentence index.
+    - Use `item.locator` with `highlightLocator()` for sentence highlighting.
+    - If `limit` is omitted, returns all sentences.
+  - `getSentenceIndexFromProgression(viewRef, { href, progression, splitter })` — `Promise<number>` mapping a progression (0..1) to a sentence index.
   - `clearHighlight(viewRef)` — Removes any active highlight decorations.
+  - `clearSentenceCache()` — Clears the JS-side sentence cache.
 
 - Examples:
 
 ```ts
-// Highlight a sentence with a hex tint string
-highlightSentence(ref, { href: 'text/chapter-1.xhtml', sentenceIndex: 0, style: { tint: '#00FF00', isActive: true } })
+const splitter: SentenceSplitter = (rawText) => {
+  return rawText
+    .split(/\n+/)
+    .flatMap((chunk) => chunk.split(/(?<=[.!?])\s+(?=[A-Z])/))
+    .map((s) => s.replace(/\s+/g, ' ').trim())
+    .filter((s) => s.length > 0);
+};
 
-// Highlight a progression range with a hex ARGB string
-highlightRange(ref, { href: 'text/chapter-1.xhtml', startProgression: 0.1, endProgression: 0.12, style: { tint: '#80FF0000' } })
+// Get all sentences
+const sentences = await getChapterSentences(ref, 'text/chapter-1.xhtml', splitter);
 
-// Highlight sentence nearest to progression and get its index
-const idx = await highlightSentenceFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.42, style: { tint: '#2009f4' } })
+// Paginated access with locators
+const page = await getChapterSentencePage(ref, {
+  href: 'text/chapter-1.xhtml',
+  offset: 0,
+  limit: 50,
+  splitter,
+});
+console.log(page.total, page.items);
 
-// Highlight a specific locator (e.g. one returned by getChapterSentencePage)
-const page2 = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 1 })
-if (page2.items[0]?.locator) {
-  highlightLocator(ref, page2.items[0].locator, { tint: '#00FF00', isActive: true })
+// Highlight a sentence using its locator
+const item = page.items[0];
+if (item?.locator) {
+  highlightLocator(ref, item.locator, { tint: '#00FF00', isActive: true });
+  await navigateTo(ref, item.locator);
 }
 
-// Navigate explicitly (e.g. after a highlight, or for Table of Contents)
+// Map progression -> sentence index
+const idx = await getSentenceIndexFromProgression(ref, {
+  href: 'text/chapter-1.xhtml',
+  progression: 0.5,
+  splitter,
+});
+
+// Highlight a progression range
+highlightRange(ref, {
+  href: 'text/chapter-1.xhtml',
+  startProgression: 0.1,
+  endProgression: 0.12,
+  style: { tint: '#80FF0000' },
+});
+
+// Navigate to a location
 await navigateTo(ref, {
   href: 'text/chapter-1.xhtml',
   type: 'application/xhtml+xml',
   locations: { progression: 0.42 },
-})
+});
 
-// Or navigate to a Link/Locator object
-await navigateTo(ref, { href: 'text/chapter-1.xhtml', type: 'application/xhtml+xml', locations: { progression: 0 } })
-
-// Page sentences (total + items)
-const page = await getChapterSentencePage(ref, { href: 'text/chapter-1.xhtml', offset: 0, limit: 50 })
-console.log(page.total, page.items)
-
-// Get all sentences as strings
-const sentences = await getChapterSentences(ref, 'text/chapter-1.xhtml')
-
-// Map progression -> sentence index
-const idx2 = await getSentenceIndexFromProgression(ref, { href: 'text/chapter-1.xhtml', progression: 0.5 })
-
-// Clear active highlight
-clearHighlight(ref)
+// Clear highlight
+clearHighlight(ref);
 ```
 
 ## Visible Text APIs
