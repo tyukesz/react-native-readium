@@ -19,6 +19,7 @@ import {
 import type {
   Link,
   Locator,
+  SentenceCleaner,
   SentenceSplitter,
 } from '@tyukesz/react-native-readium';
 
@@ -35,15 +36,9 @@ export type SentencePreviewItem = {
   progression?: number;
 };
 
-// Normalize whitespace: collapse all runs of whitespace (incl. newlines) into single space, trim.
-function cleanText(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
-
-// Default sentence splitter:
+// Default sentence splitter — returns raw substrings (no character transformation).
 // 1. Split on any newline(s) — each line/paragraph becomes a separate chunk
 // 2. Within each chunk, split into sentences using Intl.Segmenter or regex fallback
-// 3. Clean all whitespace from results
 const defaultSplitter: SentenceSplitter = (rawText: string): string[] => {
   const chunks = rawText
     .split(/\n+/)
@@ -58,18 +53,23 @@ const defaultSplitter: SentenceSplitter = (rawText: string): string[] => {
         granularity: 'sentence',
       });
       for (const seg of segmenter.segment(chunk)) {
-        const cleaned = cleanText(seg.segment);
-        if (cleaned.length > 0) results.push(cleaned);
+        const trimmed = seg.segment.trim();
+        if (trimmed.length > 0) results.push(trimmed);
       }
     } else {
       for (const s of chunk.split(/(?<=[.!?])\s+(?=[A-Z])/)) {
-        const cleaned = cleanText(s);
-        if (cleaned.length > 0) results.push(cleaned);
+        const trimmed = s.trim();
+        if (trimmed.length > 0) results.push(trimmed);
       }
     }
   }
 
   return results;
+};
+
+// Default cleaner — normalizes whitespace (collapse runs, trim).
+const defaultCleaner: SentenceCleaner = (text: string): string => {
+  return text.replace(/\s+/g, ' ').trim();
 };
 
 interface HighlightModalProps {
@@ -78,6 +78,7 @@ interface HighlightModalProps {
   readerRef: React.RefObject<any>;
   location?: Locator | Link;
   splitter?: SentenceSplitter;
+  cleaner?: SentenceCleaner;
 }
 
 export const HighlightModal: React.FC<HighlightModalProps> = ({
@@ -86,6 +87,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
   readerRef,
   location,
   splitter = defaultSplitter,
+  cleaner = defaultCleaner,
 }) => {
   const isNative = Platform.OS !== 'web';
   const [highlightHref, setHighlightHref] = useState<string>('');
@@ -120,6 +122,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
       const page = await getChapterSentencePage(readerRef, {
         href,
         splitter,
+        cleaner,
       });
       const item = page.items?.[idx];
       if (!item?.locator) {
@@ -146,6 +149,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     onClose,
     readerRef,
     splitter,
+    cleaner,
   ]);
 
   const clearHighlightAction = useCallback(() => {
@@ -166,6 +170,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
       const page = await getChapterSentencePage(readerRef, {
         href,
         splitter,
+        cleaner,
       });
       console.log('loadSentencesCount', page);
       setSentenceCount(page.total);
@@ -175,7 +180,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     } finally {
       setIsLoadingSentences(false);
     }
-  }, [highlightHref, isNative, readerRef, splitter]);
+  }, [highlightHref, isNative, readerRef, splitter, cleaner]);
 
   const loadSentencePreview = useCallback(async () => {
     if (!isNative) return;
@@ -209,6 +214,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
         href,
         progression: p,
         splitter,
+        cleaner,
       });
       console.log({ href, p, idx });
       setSentenceIndexText(String(idx));
@@ -218,6 +224,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
         offset: idx,
         limit: 1,
         splitter,
+        cleaner,
       });
       const item = page.items?.[0];
       if (item?.locator) {
@@ -227,7 +234,7 @@ export const HighlightModal: React.FC<HighlightModalProps> = ({
     } catch (e) {
       console.log('getSentenceIndexFromProgression failed', e);
     }
-  }, [highlightHref, progressionText, isNative, readerRef, splitter]);
+  }, [highlightHref, progressionText, isNative, readerRef, splitter, cleaner]);
 
   useEffect(() => {
     if (!visible) {

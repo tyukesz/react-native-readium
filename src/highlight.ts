@@ -6,9 +6,9 @@ import {
   getOrBuildSentenceIndex,
   getSentenceIndexFromProgressionSync,
 } from './sentences';
-import type { SentenceSplitter } from './sentences';
+import type { SentenceSplitter, SentenceCleaner } from './sentences';
 
-export type { SentenceSplitter } from './sentences';
+export type { SentenceSplitter, SentenceCleaner } from './sentences';
 export { clearSentenceCache } from './sentences';
 
 export type HighlightRangeParams = {
@@ -45,12 +45,14 @@ export type GetChapterSentencePageParams = {
   offset?: number;
   limit?: number;
   splitter: SentenceSplitter;
+  cleaner?: SentenceCleaner;
 };
 
 export type GetSentenceIndexFromProgressionParams = {
   href: string;
   progression: number;
   splitter: SentenceSplitter;
+  cleaner?: SentenceCleaner;
 };
 
 type NativeHighlightModule = {
@@ -192,9 +194,10 @@ export function highlightLocator(
 export async function getChapterSentences(
   viewRef: RefObject<any> | any,
   href: string,
-  splitter: SentenceSplitter
+  splitter: SentenceSplitter,
+  cleaner?: SentenceCleaner
 ): Promise<string[]> {
-  const index = await getOrBuildSentenceIndex(viewRef, href, splitter);
+  const index = await getOrBuildSentenceIndex(viewRef, href, splitter, cleaner);
   return index.sentences.map((s) => s.text);
 }
 
@@ -206,6 +209,7 @@ export async function getChapterSentencePage(
   viewRef: RefObject<any> | any,
   href: string,
   splitter: SentenceSplitter,
+  cleaner?: SentenceCleaner,
   offset?: number,
   limit?: number
 ): Promise<SentencePage>;
@@ -213,22 +217,28 @@ export async function getChapterSentencePage(
   viewRef: RefObject<any> | any,
   hrefOrParams: string | GetChapterSentencePageParams,
   splitterOrOffset?: SentenceSplitter | number,
+  cleanerOrOffset?: SentenceCleaner | number,
   offset?: number,
   limit?: number
 ): Promise<SentencePage> {
   let resolvedHref: string;
   let resolvedSplitter: SentenceSplitter;
+  let resolvedCleaner: SentenceCleaner | undefined;
   let resolvedOffset: number;
   let resolvedLimit: number;
 
   if (typeof hrefOrParams === 'string') {
     resolvedHref = hrefOrParams;
     resolvedSplitter = splitterOrOffset as SentenceSplitter;
-    resolvedOffset = offset ?? 0;
+    resolvedCleaner =
+      typeof cleanerOrOffset === 'function' ? cleanerOrOffset : undefined;
+    resolvedOffset =
+      (typeof cleanerOrOffset === 'number' ? cleanerOrOffset : offset) ?? 0;
     resolvedLimit = limit ?? 0x7fffffff;
   } else {
     resolvedHref = hrefOrParams.href;
     resolvedSplitter = hrefOrParams.splitter;
+    resolvedCleaner = hrefOrParams.cleaner;
     resolvedOffset = hrefOrParams.offset ?? 0;
     resolvedLimit = hrefOrParams.limit ?? 0x7fffffff;
   }
@@ -236,7 +246,8 @@ export async function getChapterSentencePage(
   const index = await getOrBuildSentenceIndex(
     viewRef,
     resolvedHref,
-    resolvedSplitter
+    resolvedSplitter,
+    resolvedCleaner
   );
   const total = index.sentences.length;
   const safeOffset = Math.max(0, Math.min(resolvedOffset, total));
@@ -245,11 +256,13 @@ export async function getChapterSentencePage(
   const items: SentencePageItem[] =
     safeLimit === 0
       ? []
-      : index.sentences.slice(safeOffset, safeOffset + safeLimit).map((s) => ({
-          index: s.index,
-          text: s.text,
-          locator: s.locator,
-        }));
+      : index.sentences
+          .slice(safeOffset, safeOffset + safeLimit)
+          .map((s) => ({
+            index: s.index,
+            text: s.text,
+            locator: s.locator,
+          }));
 
   return { total, items };
 }
@@ -262,26 +275,31 @@ export async function getSentenceIndexFromProgression(
   viewRef: RefObject<any> | any,
   href: string,
   progression: number,
-  splitter: SentenceSplitter
+  splitter: SentenceSplitter,
+  cleaner?: SentenceCleaner
 ): Promise<number>;
 export async function getSentenceIndexFromProgression(
   viewRef: RefObject<any> | any,
   hrefOrParams: string | GetSentenceIndexFromProgressionParams,
   progression?: number,
-  splitter?: SentenceSplitter
+  splitter?: SentenceSplitter,
+  cleaner?: SentenceCleaner
 ): Promise<number> {
   let resolvedHref: string;
   let resolvedProgression: number;
   let resolvedSplitter: SentenceSplitter;
+  let resolvedCleaner: SentenceCleaner | undefined;
 
   if (typeof hrefOrParams === 'string') {
     resolvedHref = hrefOrParams;
     resolvedProgression = progression!;
     resolvedSplitter = splitter!;
+    resolvedCleaner = cleaner;
   } else {
     resolvedHref = hrefOrParams.href;
     resolvedProgression = hrefOrParams.progression;
     resolvedSplitter = hrefOrParams.splitter;
+    resolvedCleaner = hrefOrParams.cleaner;
   }
 
   const cleanHref = resolvedHref?.trim();
@@ -297,7 +315,8 @@ export async function getSentenceIndexFromProgression(
   const index = await getOrBuildSentenceIndex(
     viewRef,
     cleanHref,
-    resolvedSplitter
+    resolvedSplitter,
+    resolvedCleaner
   );
 
   const { positionProgressions } = index;
