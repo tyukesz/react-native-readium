@@ -18,7 +18,7 @@ import {
   mapPreferencesToNavigator,
 } from '../utils';
 import { BaseReadiumView } from './BaseReadiumView';
-import { Commands } from '../ReadiumViewNativeComponent';
+import { Commands } from '../specs/ReadiumViewNativeComponent';
 
 export type ReadiumProps = Omit<BaseReadiumViewProps, 'preferences'> & {
   preferences: Preferences;
@@ -145,7 +145,7 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
         <BaseReadiumView
           height={height}
           width={width}
-          {...props}
+          {...(props as any)}
           preferences={stringifiedPreferences}
           allowedHrefs={stringifiedAllowedHrefs}
           paywallHTML={paywallHTML}
