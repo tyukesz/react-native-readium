@@ -8,6 +8,7 @@
   "source": "src/index",
   "files": [
     "src",
+    "src/specs",
     "lib",
     "android",
     "ios",
@@ -21,6 +22,19 @@
     "!**/__fixtures__",
     "!**/__mocks__"
   ],
+  "codegenConfig": {
+    "name": "RNReadiumSpec",
+    "type": "all",
+    "jsSrcsDir": "./src/specs",
+    "android": {
+      "javaPackageName": "com.reactnativereadium"
+    },
+    "ios": {
+      "componentProvider": {
+        "ReadiumView": "ReadiumViewComponentView"
+      }
+    }
+  },
   "workspaces": [
     "apps/*"
   ],
