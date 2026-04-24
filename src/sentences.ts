@@ -8,6 +8,7 @@ import type { Locator } from './interfaces';
 // ---------------------------------------------------------------------------
 
 export type SentenceSplitter = (rawText: string) => string[];
+export type SentenceCleaner = (text: string) => string;
 
 export type SentenceEntry = {
   index: number;
@@ -106,9 +107,9 @@ const EPS = 1e-9;
 // ---------------------------------------------------------------------------
 
 /**
- * Maps cleaned sentence texts back to offsets in the original combinedText.
- * Uses whitespace-agnostic matching: the splitter may collapse/strip whitespace,
- * so we match non-whitespace characters in order.
+ * Maps sentence texts (raw substrings of combinedText) back to offsets.
+ * The splitter MUST return substrings that appear in order within combinedText.
+ * Cleaning/normalization happens AFTER this step via the SentenceCleaner.
  */
 function mapSentencesToOffsets(
   combinedText: string,
@@ -118,48 +119,19 @@ function mapSentencesToOffsets(
   let cursor = 0;
 
   for (const sentence of sentenceTexts) {
-    // Skip whitespace in combinedText to find where this sentence starts
-    while (cursor < combinedText.length && /\s/.test(combinedText[cursor])) {
-      cursor++;
-    }
-
-    const sentenceStart = cursor;
-
-    // Match non-whitespace characters from the sentence against combinedText
-    let sentenceCharIdx = 0;
-    while (sentenceCharIdx < sentence.length && cursor < combinedText.length) {
-      // Skip whitespace in sentence
-      if (/\s/.test(sentence[sentenceCharIdx])) {
-        sentenceCharIdx++;
-        continue;
-      }
-      // Skip whitespace in combinedText
-      if (/\s/.test(combinedText[cursor])) {
-        cursor++;
-        continue;
-      }
-      // Match non-whitespace characters
-      if (combinedText[cursor] === sentence[sentenceCharIdx]) {
-        cursor++;
-        sentenceCharIdx++;
-      } else {
-        // Mismatch - the splitter returned text that doesn't appear in combinedText
-        throw new Error(
-          `[react-native-readium] Sentence splitter mismatch at combinedText[${cursor}]='${combinedText[cursor]}' vs sentence[${sentenceCharIdx}]='${sentence[sentenceCharIdx]}'. ` +
-            `Sentence: "${sentence.substring(0, 80)}..."`
-        );
-      }
-    }
-
-    if (sentenceCharIdx < sentence.replace(/\s/g, '').length) {
+    const idx = combinedText.indexOf(sentence, cursor);
+    if (idx === -1) {
       throw new Error(
-        `[react-native-readium] Sentence splitter returned text that extends beyond combinedText. ` +
-          `Sentence: "${sentence.substring(0, 80)}..."`
+        `[react-native-readium] Sentence splitter returned a string not found in combinedText at cursor ${cursor}: "${sentence.substring(
+          0,
+          80
+        )}...". ` +
+          'The splitter must return raw substrings of the input text (do not modify characters). ' +
+          'Use the SentenceCleaner callback for text normalization instead.'
       );
     }
-
-    const sentenceEnd = cursor;
-    result.push({ text: sentence, start: sentenceStart, end: sentenceEnd });
+    result.push({ text: sentence, start: idx, end: idx + sentence.length });
+    cursor = idx + sentence.length;
   }
 
   return result;
@@ -214,10 +186,17 @@ function buildLocatorForSentence(
   // TextQuote: highlight = full cleaned sentence text,
   // before/after = context from combinedText around the sentence boundaries
   const beforeStart = Math.max(0, sentenceStart - TEXT_QUOTE_CONTEXT_CHARS);
-  const afterEnd = Math.min(combinedText.length, sentenceEnd + TEXT_QUOTE_CONTEXT_CHARS);
-  const before = combinedText.substring(beforeStart, sentenceStart).replace(/\s+/g, ' ') || undefined;
+  const afterEnd = Math.min(
+    combinedText.length,
+    sentenceEnd + TEXT_QUOTE_CONTEXT_CHARS
+  );
+  const before =
+    combinedText.substring(beforeStart, sentenceStart).replace(/\s+/g, ' ') ||
+    undefined;
   const highlight = sentenceText;
-  const after = combinedText.substring(sentenceEnd, afterEnd).replace(/\s+/g, ' ') || undefined;
+  const after =
+    combinedText.substring(sentenceEnd, afterEnd).replace(/\s+/g, ' ') ||
+    undefined;
 
   // Clone the segment locator and rewrite
   const baseLocator = { ...seg.locator };
@@ -244,7 +223,8 @@ function buildLocatorForSentence(
 function buildSentenceIndex(
   href: string,
   rawText: NativeChapterRawText,
-  splitter: SentenceSplitter
+  splitter: SentenceSplitter,
+  cleaner?: SentenceCleaner
 ): SentenceIndex {
   const { combinedText, segments, positionEntries } = rawText;
 
@@ -273,9 +253,7 @@ function buildSentenceIndex(
 
   const drafts: Draft[] = mapped.map((m, idx) => {
     const charProgression =
-      totalChars > 0
-        ? Math.max(0, Math.min(1, m.start / totalChars))
-        : 0;
+      totalChars > 0 ? Math.max(0, Math.min(1, m.start / totalChars)) : 0;
     const boundaryIndex =
       progressions.length === 0
         ? 0
@@ -302,13 +280,9 @@ function buildSentenceIndex(
 
   const sentences: SentenceEntry[] = drafts.map((d) => {
     const pageStart =
-      progressions.length === 0
-        ? 0
-        : progressions[d.boundaryIndex] ?? 0;
+      progressions.length === 0 ? 0 : progressions[d.boundaryIndex] ?? 0;
     const pageEnd =
-      progressions.length === 0
-        ? 1
-        : progressions[d.boundaryIndex + 1] ?? 1;
+      progressions.length === 0 ? 1 : progressions[d.boundaryIndex + 1] ?? 1;
     const group = (grouped.get(d.boundaryIndex) ?? []).sort(
       (a, b) => a.start - b.start
     );
@@ -335,7 +309,7 @@ function buildSentenceIndex(
 
     return {
       index: d.index,
-      text: d.text,
+      text: cleaner ? cleaner(d.text) : d.text,
       start: d.start,
       end: d.end,
       progression: Math.max(0, Math.min(1, progression)),
@@ -355,7 +329,8 @@ function buildSentenceIndex(
 export async function getOrBuildSentenceIndex(
   viewRef: RefObject<any> | any,
   href: string,
-  splitter: SentenceSplitter
+  splitter: SentenceSplitter,
+  cleaner?: SentenceCleaner
 ): Promise<SentenceIndex> {
   if (Platform.OS === 'web') {
     throw new Error('Sentence extraction is not supported on web');
@@ -385,7 +360,7 @@ export async function getOrBuildSentenceIndex(
   );
 
   // Build sentence index
-  const index = buildSentenceIndex(cleanHref, rawText, splitter);
+  const index = buildSentenceIndex(cleanHref, rawText, splitter, cleaner);
 
   // Cache it
   cachePut(cleanHref, index);
@@ -417,19 +392,12 @@ export function getSentenceIndexFromProgressionSync(
   })();
 
   const pageStart =
-    positionProgressions.length === 0
-      ? 0
-      : positionProgressions[bIdx] ?? 0;
+    positionProgressions.length === 0 ? 0 : positionProgressions[bIdx] ?? 0;
   const pageEnd =
-    positionProgressions.length === 0
-      ? 1
-      : positionProgressions[bIdx + 1] ?? 1;
+    positionProgressions.length === 0 ? 1 : positionProgressions[bIdx + 1] ?? 1;
 
   const inPage = sentences
-    .filter(
-      (s) =>
-        Math.abs(s.pageStartProgression - pageStart) <= EPS
-    )
+    .filter((s) => Math.abs(s.pageStartProgression - pageStart) <= EPS)
     .sort((a, b) => a.progression - b.progression);
 
   if (inPage.length === 0) {
