@@ -24,6 +24,5 @@ Pod::Spec.new do |s|
   s.dependency 'ReadiumAdapterGCDWebServer', '~> 3.5.0' 
   s.dependency 'ReadiumInternal'
 
-  s.dependency "React-Core"
-  
+  install_modules_dependencies(s)
 end
