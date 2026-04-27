@@ -694,6 +694,9 @@ class EpubReaderFragment : VisualReaderFragment() {
             navigatorFactory.createFragmentFactory(
               initialLocator = model.initialLocation,
               initialPreferences = userPreferences,
+              configuration = EpubNavigatorFragment.Configuration(
+                shouldApplyInsetsPadding = false,
+              ),
             )
 
         setHasOptionsMenu(true)

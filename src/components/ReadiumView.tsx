@@ -13,10 +13,7 @@ import type {
   Dimensions,
   Preferences,
 } from '../interfaces';
-import {
-  getWidthOrHeightValue as dimension,
-  mapPreferencesToNavigator,
-} from '../utils';
+import { mapPreferencesToNavigator } from '../utils';
 import { BaseReadiumView } from './BaseReadiumView';
 import { Commands } from '../specs/ReadiumViewNativeComponent';
 
@@ -64,8 +61,8 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
         },
       }: any) => {
         setDimensions({
-          width: dimension(layoutWidth),
-          height: dimension(layoutHeight),
+          width: layoutWidth,
+          height: layoutHeight,
         });
       },
       []
