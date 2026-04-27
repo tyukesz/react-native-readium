@@ -15,6 +15,7 @@ Pod::Spec.new do |s|
 
   s.source       = { :git => "http://github.com/5-stones/react-native-readium.git", :tag => "#{s.version}" }
   s.source_files = "ios/**/*.{h,m,mm,swift}"
+  s.private_header_files = "ios/ReadiumViewComponentView.h"
 
   s.swift_version = "5.0"
 
@@ -24,6 +25,5 @@ Pod::Spec.new do |s|
   s.dependency 'ReadiumAdapterGCDWebServer', '~> 3.5.0' 
   s.dependency 'ReadiumInternal'
 
-  s.dependency "React-Core"
-  
+  install_modules_dependencies(s)
 end

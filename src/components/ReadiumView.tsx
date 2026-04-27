@@ -13,12 +13,9 @@ import type {
   Dimensions,
   Preferences,
 } from '../interfaces';
-import {
-  getWidthOrHeightValue as dimension,
-  mapPreferencesToNavigator,
-} from '../utils';
+import { mapPreferencesToNavigator } from '../utils';
 import { BaseReadiumView } from './BaseReadiumView';
-import { Commands } from '../ReadiumViewNativeComponent';
+import { Commands } from '../specs/ReadiumViewNativeComponent';
 
 export type ReadiumProps = Omit<BaseReadiumViewProps, 'preferences'> & {
   preferences: Preferences;
@@ -64,18 +61,20 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
         },
       }: any) => {
         setDimensions({
-          width: dimension(layoutWidth),
-          height: dimension(layoutHeight),
+          width: layoutWidth,
+          height: layoutHeight,
         });
       },
       []
     );
 
-    // wrap the native onLocationChange and extract the raw event value
     const onLocationChange = useCallback(
       (event: any) => {
-        if (wrappedOnLocationChange) {
-          wrappedOnLocationChange(event.nativeEvent);
+        if (!wrappedOnLocationChange) return;
+        try {
+          wrappedOnLocationChange(JSON.parse(event.nativeEvent.locatorJson));
+        } catch {
+          // ignore malformed envelopes
         }
       },
       [wrappedOnLocationChange]
@@ -83,8 +82,11 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
 
     const onPublicationReady = useCallback(
       (event: any) => {
-        if (wrappedOnPublicationReady) {
-          wrappedOnPublicationReady(event.nativeEvent);
+        if (!wrappedOnPublicationReady) return;
+        try {
+          wrappedOnPublicationReady(JSON.parse(event.nativeEvent.payloadJson));
+        } catch {
+          // ignore malformed envelopes
         }
       },
       [wrappedOnPublicationReady]
@@ -140,12 +142,21 @@ export const ReadiumView: React.FC<ReadiumProps> = forwardRef(
       return JSON.stringify(allowedHrefs.map(normalizeHref));
     }, [allowedHrefs]);
 
+    const { file, location, ...rest } = props;
+    const stringifiedFile = useMemo(() => JSON.stringify(file), [file]);
+    const stringifiedLocation = useMemo(
+      () => (location !== undefined ? JSON.stringify(location) : undefined),
+      [location]
+    );
+
     return (
       <View style={styles.container} onLayout={onLayout}>
         <BaseReadiumView
+          {...(rest as any)}
           height={height}
           width={width}
-          {...props}
+          file={stringifiedFile}
+          location={stringifiedLocation}
           preferences={stringifiedPreferences}
           allowedHrefs={stringifiedAllowedHrefs}
           paywallHTML={paywallHTML}

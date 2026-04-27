@@ -1,12 +1,11 @@
 package com.reactnativereadium
 
-import android.util.Log
-import com.facebook.react.bridge.*
-import com.facebook.react.common.MapBuilder
-import com.facebook.react.uimanager.annotations.ReactProp
-import com.facebook.react.uimanager.annotations.ReactPropGroup
+import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.uimanager.ThemedReactContext
 import com.facebook.react.uimanager.ViewGroupManager
+import com.facebook.react.uimanager.ViewManagerDelegate
+import com.facebook.react.viewmanagers.ReadiumViewManagerDelegate
+import com.facebook.react.viewmanagers.ReadiumViewManagerInterface
 import com.reactnativereadium.reader.ReaderService
 import com.reactnativereadium.utils.File
 import com.reactnativereadium.utils.LinkOrLocator
@@ -17,81 +16,70 @@ import org.readium.r2.shared.publication.Locator
 
 class ReadiumViewManager(
   val reactContext: ReactApplicationContext
-) : ViewGroupManager<ReadiumView>() {
+) : ViewGroupManager<ReadiumView>(), ReadiumViewManagerInterface<ReadiumView> {
   private var svc = ReaderService(reactContext)
+  private val delegate = ReadiumViewManagerDelegate<ReadiumView, ReadiumViewManager>(this)
 
   override fun getName() = "ReadiumView"
 
+  override fun getDelegate(): ViewManagerDelegate<ReadiumView> = delegate
+
   override fun createViewInstance(reactContext: ThemedReactContext): ReadiumView {
-    return ReadiumView(reactContext)
+    val view = ReadiumView(reactContext)
+    view.pendingBuildTrigger = { buildForViewIfReady(view) }
+    return view
   }
 
-  override fun getExportedCustomBubblingEventTypeConstants(): Map<String, Any> {
-    return MapBuilder.builder<String, Any>()
-      .put(
-        ON_LOCATION_CHANGE,
-        MapBuilder.of(
-          "phasedRegistrationNames",
-          MapBuilder.of("bubbled", ON_LOCATION_CHANGE)
-        )
-      )
-      .put(
-        ON_PUBLICATION_READY,
-        MapBuilder.of(
-          "phasedRegistrationNames",
-          MapBuilder.of("bubbled", ON_PUBLICATION_READY)
-        )
-      )
-      .put(
-        ON_TAP,
-        MapBuilder.of(
-          "phasedRegistrationNames",
-          MapBuilder.of("bubbled", ON_TAP)
-        )
-      )
-      .put(
-        ON_RESTRICTED_NAVIGATION,
-        MapBuilder.of(
-          "phasedRegistrationNames",
-          MapBuilder.of("bubbled", ON_RESTRICTED_NAVIGATION)
-        )
-      )
-      .build()
-  }
-
-  override fun receiveCommand(view: ReadiumView, commandId: String?, args: ReadableArray?) {
-    super.receiveCommand(view, commandId, args)
-
-    when (commandId) {
-      "create" -> {
-        view.isViewInitialized = true
-        if (view.file != null) {
-          buildForViewIfReady(view)
-        }
-      }
-      else -> {
-        Log.w(TAG, "Unknown command received: $commandId")
-      }
+  override fun create(view: ReadiumView) {
+    view.isViewInitialized = true
+    if (view.file != null) {
+      buildForViewIfReady(view)
     }
   }
 
-  @ReactProp(name = "file")
-  fun setFile(view: ReadiumView, file: ReadableMap) {
-    val path = (file.getString("url") ?: "")
+  override fun setFile(view: ReadiumView, value: String?) {
+    if (value == null) return
+    val json = JSONObject(value)
+    val path = json.optString("url", "")
       .replace("^(file:/+)?(/.*)$".toRegex(), "$2")
-    val location = file.getMap("initialLocation")
-    var initialLocation: LinkOrLocator? = null
-
-    if (location != null) {
-      initialLocation = locationToLinkOrLocator(location)
-    }
-
+    val initialLocation = json.optJSONObject("initialLocation")
+      ?.let { locationToLinkOrLocator(it) }
     view.file = File(path, initialLocation)
-    this.buildForViewIfReady(view)
+    buildForViewIfReady(view)
   }
 
-  fun locationToLinkOrLocator(location: ReadableMap): LinkOrLocator? {
-    val json = JSONObject(location.toHashMap() as HashMap<*, *>)
+  override fun setLocation(view: ReadiumView, value: String?) {
+    if (value == null) return
+    locationToLinkOrLocator(JSONObject(value))?.let { view.updateLocation(it) }
+  }
+
+  override fun setPreferences(view: ReadiumView, value: String?) {
+    view.updatePreferencesFromJsonString(value)
+  }
+
+  override fun setAllowedHrefs(view: ReadiumView, value: String?) {
+    view.updateAllowedHrefsFromJsonString(value)
+    buildForViewIfReady(view)
+  }
+
+  override fun setPaywallHTML(view: ReadiumView, value: String?) {
+    view.paywallHTML = value
+    buildForViewIfReady(view)
+  }
+
+  override fun setHidePageNumbers(view: ReadiumView, value: Boolean) {
+    view.updatePageNumberVisibility(value)
+  }
+
+  override fun setEnableTapNavigation(view: ReadiumView, value: Boolean) {
+    // iOS only - no-op on Android
+  }
+
+  override fun setDisableTextSelection(view: ReadiumView, value: Boolean) {
+    view.updateTextSelectionDisabled(value)
+  }
+
+  private fun locationToLinkOrLocator(json: JSONObject): LinkOrLocator? {
     val hasLocations = json.has("locations")
     val hasType = json.has("type") && !json.getString("type").isEmpty()
     val hasChildren = json.has("children")
@@ -112,61 +100,7 @@ class ReadiumViewManager(
       }
     }
 
-    return linkOrLocator;
-  }
-
-  @ReactProp(name = "location")
-  fun setLocation(view: ReadiumView, location: ReadableMap) {
-    var linkOrLocator: LinkOrLocator? = locationToLinkOrLocator(location)
-
-    if (linkOrLocator != null) {
-      view.updateLocation(linkOrLocator)
-    }
-  }
-
-  @ReactProp(name = "preferences")
-  fun setPreferences(view: ReadiumView, serialisedPreferences: String) {
-    view.updatePreferencesFromJsonString(serialisedPreferences)
-  }
-
-  @ReactProp(name = "allowedHrefs")
-  fun setAllowedHrefs(view: ReadiumView, allowedHrefs: String?) {
-    view.updateAllowedHrefsFromJsonString(allowedHrefs)
-    buildForViewIfReady(view)
-  }
-
-  @ReactProp(name = "paywallHTML")
-  fun setPaywallHTML(view: ReadiumView, paywallHTML: String?) {
-    view.paywallHTML = paywallHTML
-    buildForViewIfReady(view)
-  }
-
-  @ReactProp(name = "hidePageNumbers", defaultBoolean = false)
-  fun setHidePageNumbers(view: ReadiumView, hidePageNumbers: Boolean) {
-    view.updatePageNumberVisibility(hidePageNumbers)
-  }
-
-  @ReactProp(name = "enableTapNavigation", defaultBoolean = true)
-  fun setEnableTapNavigation(view: ReadiumView, enableTapNavigation: Boolean) {
-    // iOS only - no-op on Android
-  }
-
-  @ReactProp(name = "disableTextSelection", defaultBoolean = false)
-  fun setDisableTextSelection(view: ReadiumView, disableTextSelection: Boolean) {
-    view.updateTextSelectionDisabled(disableTextSelection)
-  }
-
-  @ReactPropGroup(names = ["width", "height"], customType = "Style")
-  fun setStyle(view: ReadiumView?, index: Int, value: Int) {
-    if (view != null) {
-      if (index == 0) {
-        view.dimensions.width = value
-      }
-      if (index == 1) {
-        view.dimensions.height = value
-      }
-      buildForViewIfReady(view)
-    }
+    return linkOrLocator
   }
 
   private fun buildForViewIfReady(view: ReadiumView) {
@@ -188,7 +122,6 @@ class ReadiumViewManager(
   }
 
   companion object {
-    private const val TAG = "ReadiumViewManager"
     var ON_LOCATION_CHANGE = "onLocationChange"
     var ON_PUBLICATION_READY = "onPublicationReady"
     var ON_TAP = "onTap"

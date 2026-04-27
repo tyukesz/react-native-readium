@@ -1,25 +1,21 @@
 import type { HostComponent, ViewProps } from 'react-native';
-import type { DirectEventHandler } from 'react-native/Libraries/Types/CodegenTypes';
+import type {
+  DirectEventHandler,
+  Double,
+} from 'react-native/Libraries/Types/CodegenTypes';
 // eslint-disable-next-line @react-native/no-deep-imports
 import codegenNativeComponent from 'react-native/Libraries/Utilities/codegenNativeComponent';
 // eslint-disable-next-line @react-native/no-deep-imports
 import codegenNativeCommands from 'react-native/Libraries/Utilities/codegenNativeCommands';
-import type { File } from './interfaces/File';
-import type { Locator } from './interfaces/Locator';
-import type { PublicationReadyEvent } from './interfaces/PublicationReady';
-import type { TapEvent } from './interfaces/TapEvent';
 
-// Event types for native events
-type OnLocationChangeEvent = Readonly<Locator>;
-type OnPublicationReadyEvent = Readonly<PublicationReadyEvent>;
-type OnTapEvent = Readonly<TapEvent>;
-type OnRestrictedNavigationEvent = Readonly<{
-  href: string;
-}>;
+type OnLocationChangeEvent = Readonly<{ locatorJson: string }>;
+type OnPublicationReadyEvent = Readonly<{ payloadJson: string }>;
+type OnTapEvent = Readonly<{ x: Double; y: Double }>;
+type OnRestrictedNavigationEvent = Readonly<{ href: string }>;
 
-// Native component props interface
 export interface NativeProps extends ViewProps {
-  file: File;
+  file: string;
+  location?: string;
   preferences?: string;
   allowedHrefs?: string;
   paywallHTML?: string;
@@ -32,16 +28,14 @@ export interface NativeProps extends ViewProps {
   onTap?: DirectEventHandler<OnTapEvent>;
 }
 
-// Native commands interface
 export interface NativeCommands {
   create: (viewRef: React.ElementRef<HostComponent<NativeProps>>) => void;
 }
 
-// Generate the native component
-export const ReadiumViewNativeComponent =
-  codegenNativeComponent<NativeProps>('ReadiumView');
+export default codegenNativeComponent<NativeProps>(
+  'ReadiumView'
+) as HostComponent<NativeProps>;
 
-// Generate the commands
 export const Commands = codegenNativeCommands<NativeCommands>({
   supportedCommands: ['create'],
 });
