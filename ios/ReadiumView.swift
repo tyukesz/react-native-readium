@@ -94,7 +94,7 @@ private extension UIColor {
 }
 
 
-class ReadiumView : UIView, Loggable {
+@objc public class ReadiumView : UIView, Loggable {
   var readerService: ReaderService = ReaderService()
   var readerViewController: ReaderViewController?
   var viewController: UIViewController? {
@@ -449,25 +449,37 @@ class ReadiumView : UIView, Loggable {
   private let highlightDecorationGroup = "rn_highlight"
   private let highlightDecorationId = "active"
 
-  @objc var file: NSDictionary? = nil {
+  private var fileDict: NSDictionary? = nil
+  private var locationDict: NSDictionary? = nil
+
+  private func parseJSONDict(_ value: NSString?) -> NSDictionary? {
+    guard let value = value,
+          let data = (value as String).data(using: .utf8),
+          let obj = try? JSONSerialization.jsonObject(with: data),
+          let dict = obj as? NSDictionary else { return nil }
+    return dict
+  }
+
+  @objc public var file: NSString? = nil {
     didSet {
-      // Sentence cache is now on JS side; no native cache to clear.
+      fileDict = parseJSONDict(file)
       publicationPositionsByHref.removeAll()
       publicationPositionEntriesByHref.removeAll()
       publicationPositionEntriesByProgressionByHref.removeAll()
       publicationProgressionByPosition.removeAll()
-      let initialLocation = file?["initialLocation"] as? NSDictionary
-      if let url = file?["url"] as? String {
+      let initialLocation = fileDict?["initialLocation"] as? NSDictionary
+      if let url = fileDict?["url"] as? String {
         self.loadBook(url: url, location: initialLocation)
       }
     }
   }
-  @objc var location: NSDictionary? = nil {
+  @objc public var location: NSString? = nil {
     didSet {
+      locationDict = parseJSONDict(location)
       self.updateLocation()
     }
   }
-  @objc var preferences: NSString? = nil {
+  @objc public var preferences: NSString? = nil {
     didSet {
       // Sentence cache is now on JS side; no native cache to clear.
       publicationPositionsByHref.removeAll()
@@ -477,7 +489,7 @@ class ReadiumView : UIView, Loggable {
       self.updatePreferences(preferences)
     }
   }
-  @objc var allowedHrefs: NSString? = nil {
+  @objc public var allowedHrefs: NSString? = nil {
     didSet {
       allowedHrefsSet = parseAllowedHrefs(allowedHrefs)
       recomputeRestrictionAnchorLocator()
@@ -485,32 +497,34 @@ class ReadiumView : UIView, Loggable {
       reloadBookIfNeeded()
     }
   }
-  @objc var paywallHTML: NSString? = nil {
+  @objc public var paywallHTML: NSString? = nil {
     didSet {
       reloadBookIfNeeded()
     }
   }
 
-  @objc var hidePageNumbers: Bool = false {
+  @objc public var hidePageNumbers: Bool = false {
     didSet {
       updatePageNumberVisibility()
     }
   }
-  @objc var enableTapNavigation: Bool = true {
+  @objc public var enableTapNavigation: Bool = true {
     didSet {
       readerViewController?.enableTapNavigation = enableTapNavigation
     }
   }
-  @objc var disableTextSelection: Bool = false {
+  @objc public var disableTextSelection: Bool = false {
     didSet {
       readerViewController?.disableTextSelection = disableTextSelection
     }
   }
 
-  @objc var onLocationChange: RCTDirectEventBlock?
-  @objc var onPublicationReady: RCTDirectEventBlock?
-  @objc var onRestrictedNavigation: RCTDirectEventBlock?
-  @objc var onTap: RCTDirectEventBlock?
+  @objc public var onLocationChange: ((NSDictionary) -> Void)?
+  @objc public var onPublicationReady: ((NSDictionary) -> Void)?
+  @objc public var onRestrictedNavigation: ((NSDictionary) -> Void)?
+  @objc public var onTap: ((NSDictionary) -> Void)?
+
+  @objc public func handleCreate() {}
 
   func loadBook(
     url: String,
@@ -533,13 +547,14 @@ class ReadiumView : UIView, Loggable {
           return
         }
         self.addViewControllerAsSubview(vc)
-        self.location = location
+        self.locationDict = location
+        self.updateLocation()
       }
     )
   }
 
   func getLocator() async -> Locator? {
-    return await ReaderService.locatorFromLocation(location, readerViewController?.publication)
+    return await ReaderService.locatorFromLocation(locationDict, readerViewController?.publication)
   }
 
   func updateLocation() {
@@ -567,9 +582,9 @@ class ReadiumView : UIView, Loggable {
   }
 
   private func reloadBookIfNeeded() {
-    guard let initialLocation = file?["initialLocation"] as? NSDictionary,
-          let url = file?["url"] as? String else {
-      if let url = file?["url"] as? String {
+    guard let initialLocation = fileDict?["initialLocation"] as? NSDictionary,
+          let url = fileDict?["url"] as? String else {
+      if let url = fileDict?["url"] as? String {
         loadBook(url: url, location: nil)
       }
       return
@@ -900,7 +915,7 @@ class ReadiumView : UIView, Loggable {
     }
   }
 
-  override func removeFromSuperview() {
+  public override func removeFromSuperview() {
     readerViewController?.willMove(toParent: nil)
     readerViewController?.view.removeFromSuperview()
     readerViewController?.removeFromParent()
@@ -923,7 +938,7 @@ class ReadiumView : UIView, Loggable {
     vc.publisher.sink(
       receiveValue: { locator in
         self.handleLocatorAccess(locator)
-        self.onLocationChange?(locator.json)
+        self.onLocationChange?(locator.json as NSDictionary)
       }
     )
     .store(in: &self.subscriptions)
@@ -1023,7 +1038,7 @@ class ReadiumView : UIView, Loggable {
 
       // Always emit onPublicationReady event
       // React Native bridge handles null callbacks gracefully
-      self.onPublicationReady?(payload)
+      self.onPublicationReady?(payload as NSDictionary)
     }
   }
 }
