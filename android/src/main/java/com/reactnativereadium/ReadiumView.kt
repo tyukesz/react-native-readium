@@ -25,6 +25,7 @@ import com.reactnativereadium.utils.MetadataNormalizer
 import com.reactnativereadium.utils.toWritableArray
 import com.reactnativereadium.utils.toWritableMap
 import org.json.JSONArray
+import org.json.JSONObject
 import org.readium.r2.shared.publication.Locator
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
@@ -38,6 +39,7 @@ class ReadiumView(
   }
 
   var dimensions: Dimensions = Dimensions(0,0)
+  var pendingBuildTrigger: (() -> Unit)? = null
   var file: File? = null
   var fragment: BaseReaderFragment? = null
   var isViewInitialized: Boolean = false
@@ -312,8 +314,10 @@ class ReadiumView(
           if (disableTextSelection) {
             (fragment as? EpubReaderFragment)?.reapplyTextSelectionPolicyIfNeeded()
           }
-          val payload = event.locator.toWritableMap()
-          dispatch(ReadiumViewManager.ON_LOCATION_CHANGE, payload)
+          val locatorMap = event.locator.toWritableMap()
+          val locatorJson = JSONObject(locatorMap.toHashMap()).toString()
+          val envelope = Arguments.createMap().apply { putString("locatorJson", locatorJson) }
+          dispatch(ReadiumViewManager.ON_LOCATION_CHANGE, envelope)
         }
         is ReaderViewModel.Event.PublicationReady -> {
           publicationPositions = event.positions
@@ -328,7 +332,9 @@ class ReadiumView(
             // Use spec-based normalizer to ensure consistent structure
             putMap("metadata", MetadataNormalizer.normalize(event.metadata))
           }
-          dispatch(ReadiumViewManager.ON_PUBLICATION_READY, payload)
+          val payloadJson = JSONObject(payload.toHashMap()).toString()
+          val envelope = Arguments.createMap().apply { putString("payloadJson", payloadJson) }
+          dispatch(ReadiumViewManager.ON_PUBLICATION_READY, envelope)
         }
       }
     }
@@ -345,9 +351,10 @@ class ReadiumView(
   }
 
   private fun sendEvent(eventName: String, payload: WritableMap?) {
+    val surfaceId = UIManagerHelper.getSurfaceId(this)
     val eventDispatcher = UIManagerHelper.getEventDispatcherForReactTag(reactContext, this.id)
     if (eventDispatcher != null) {
-      eventDispatcher.dispatchEvent(ReadiumEvent(this.id, eventName, payload))
+      eventDispatcher.dispatchEvent(ReadiumEvent(surfaceId, this.id, eventName, payload))
     } else {
       Log.w(TAG, "EventDispatcher is null for view id ${this.id}")
     }
@@ -355,10 +362,11 @@ class ReadiumView(
 
   // Custom event class for new architecture
   private class ReadiumEvent(
+    surfaceId: Int,
     viewTag: Int,
     private val _eventName: String,
     private val _eventData: WritableMap?
-  ) : Event<ReadiumEvent>(viewTag) {
+  ) : Event<ReadiumEvent>(surfaceId, viewTag) {
     override fun getEventName(): String = _eventName
     override fun getEventData(): WritableMap? = _eventData
   }
@@ -411,6 +419,15 @@ class ReadiumView(
     }
     applyPendingLocationIfAny()
     reevaluateRestrictionForCurrentHref()
+  }
+
+  override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+    super.onSizeChanged(w, h, oldw, oldh)
+    if (w != dimensions.width || h != dimensions.height) {
+      dimensions.width = w
+      dimensions.height = h
+      pendingBuildTrigger?.invoke()
+    }
   }
 
   override fun onWindowVisibilityChanged(visibility: Int) {
