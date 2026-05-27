@@ -1,6 +1,8 @@
 package com.reactnativereadium
 
 import android.util.Log
+import android.view.View
+import androidx.fragment.app.FragmentActivity
 import com.facebook.react.bridge.*
 import com.facebook.react.common.MapBuilder
 import com.facebook.react.uimanager.annotations.ReactProp
@@ -24,6 +26,27 @@ class ReadiumViewManager(
 
   override fun createViewInstance(reactContext: ThemedReactContext): ReadiumView {
     return ReadiumView(reactContext)
+  }
+
+  override fun onDropViewInstance(view: ReadiumView) {
+    // React Native is destroying the view. Remove the fragment so its WebView and
+    // Publication objects don't leak past view lifetime — orphans starve the next
+    // open of tile memory and slow it down.
+    val frag = view.fragment
+    val activity = view.reactContext.currentActivity as? FragmentActivity
+    if (frag != null && activity != null) {
+      try {
+        activity.supportFragmentManager
+          .beginTransaction()
+          .remove(frag)
+          .commitNowAllowingStateLoss()
+      } catch (e: IllegalStateException) {
+        Log.w(TAG, "Failed to remove fragment on drop: ${e.message}")
+      }
+    }
+    view.fragment = null
+    view.isFragmentAdded = false
+    super.onDropViewInstance(view)
   }
 
   override fun getExportedCustomBubblingEventTypeConstants(): Map<String, Any> {
@@ -174,15 +197,49 @@ class ReadiumViewManager(
     val width = view.dimensions.width
     val height = view.dimensions.height
 
-    if (file != null && view.isViewInitialized && width > 0 && height > 0) {
-      runBlocking {
-        svc.openPublication(
-          file.path,
-          file.initialLocation,
-          view.currentRestrictionConfiguration()
-        ) { fragment ->
-          view.addFragment(fragment)
+    if (file == null || !view.isViewInitialized || width <= 0 || height <= 0) {
+      return
+    }
+
+    if (!view.isAttachedToWindow) {
+      // Every prop setter (setFile/setStyle/setAllowedHrefs/setPaywallHTML) calls
+      // buildForViewIfReady. Without this guard each setter on a not-yet-attached
+      // view registers its own listener — attach then fires N opens stacked on the
+      // main thread.
+      if (view.isBuildScheduled) {
+        return
+      }
+      view.isBuildScheduled = true
+      view.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {
+          view.removeOnAttachStateChangeListener(this)
+          view.isBuildScheduled = false
+          // Defer to next main-loop message: onViewAttachedToWindow fires
+          // synchronously inside the host Fragment's transaction (createView →
+          // executeOpsTogether). Running addFragment().commitNow() from here
+          // throws "FragmentManager is already executing transactions".
+          view.post { buildForViewIfReady(view) }
         }
+        override fun onViewDetachedFromWindow(v: View) {
+          view.removeOnAttachStateChangeListener(this)
+          view.isBuildScheduled = false
+        }
+      })
+      return
+    }
+
+    // Idempotency: a fragment is already attached for this view, no rebuild needed.
+    if (view.isFragmentAdded) {
+      return
+    }
+
+    runBlocking {
+      svc.openPublication(
+        file.path,
+        file.initialLocation,
+        view.currentRestrictionConfiguration()
+      ) { fragment ->
+        view.addFragment(fragment)
       }
     }
   }
