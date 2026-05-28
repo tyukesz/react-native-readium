@@ -42,6 +42,7 @@ class ReadiumView(
   var fragment: BaseReaderFragment? = null
   var isViewInitialized: Boolean = false
   var isFragmentAdded: Boolean = false
+  var isBuildScheduled: Boolean = false
   var lateInitSerializedUserPreferences: String? = null
   var lateInitHighlightRangeJson: String? = null
 
